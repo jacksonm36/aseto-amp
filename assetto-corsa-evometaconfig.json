@@ -1,0 +1,20 @@
+[
+    {
+        "ConfigFile": "cfg/server.json",
+        "AutoMap": true,
+        "Importable": true,
+        "ConfigType": "json"
+    },
+    {
+        "ConfigFile": "cfg/season.json",
+        "AutoMap": true,
+        "Importable": true,
+        "ConfigType": "json"
+    },
+    {
+        "ConfigFile": "cfg/launch.json",
+        "AutoMap": true,
+        "Importable": false,
+        "ConfigType": "json"
+    }
+]

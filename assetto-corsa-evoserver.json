@@ -1,0 +1,14 @@
+{
+  "server_name": "Assetto Corsa EVO Server - Powered by AMP",
+  "server_tcp_listener_port": 9700,
+  "server_udp_listener_port": 9700,
+  "server_http_port": 8081,
+  "max_players": 16,
+  "cycle": true,
+  "driver_password": "",
+  "spectator_password": "",
+  "admin_password": "",
+  "type": "MultiplayerServerListSessionType_RANKED",
+  "entry_list_path": "",
+  "results_path": ""
+}

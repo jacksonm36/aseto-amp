@@ -1,0 +1,16 @@
+{
+  "game_type": "GameModeType_PRACTICE",
+  "event": {
+    "track": "",
+    "layout": "",
+    "event_name": "",
+    "track_length": 0
+  },
+  "export_json": false,
+  "game_config": {
+    "practice_duration": 1200
+  },
+  "weather_type": "GameModeSelectionWeatherType_CLEAR",
+  "weather_behaviour": "GameModeSelectionWeatherBehaviour_STATIC",
+  "initial_grip": "InitialGrip_GREEN"
+}

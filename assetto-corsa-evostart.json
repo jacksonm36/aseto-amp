@@ -1,0 +1,18 @@
+[
+    {
+        "UpdateStageName": "Build Launch Payloads",
+        "UpdateSourcePlatform": "Windows",
+        "UpdateSource": "Executable",
+        "UpdateSourceData": "python",
+        "UpdateSourceArgs": "\"{{$FullBaseDir}}prepare_launch.py\" \"{{$FullBaseDir}}\"",
+        "SkipOnFailure": false
+    },
+    {
+        "UpdateStageName": "Build Launch Payloads",
+        "UpdateSourcePlatform": "Linux",
+        "UpdateSource": "Executable",
+        "UpdateSourceData": "/bin/bash",
+        "UpdateSourceArgs": "-c \"python3 \\\"{{$FullBaseDir}}prepare_launch.py\\\" \\\"{{$FullBaseDir}}\\\" || python \\\"{{$FullBaseDir}}prepare_launch.py\\\" \\\"{{$FullBaseDir}}\\\"\"",
+        "SkipOnFailure": false
+    }
+]
