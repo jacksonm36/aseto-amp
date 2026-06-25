@@ -14,8 +14,6 @@ LAUNCH_PATHS = {
     "GameModeType_RACE_WEEKEND": "content\\\\data\\\\race_weekend.seasondefinition",
 }
 VALID_TUNING_TYPES = {"TuningAllowed", "TuningDenied"}
-VAULT_KEY_NAME = ".vault-key"
-TOKEN_ENC_FIELD = "token_enc"
 
 
 def as_bool(value, default=False):
@@ -104,88 +102,6 @@ def server_installed(server_dir):
     return os.path.isfile(os.path.join(server_dir, "AssettoCorsaEVOServer.exe"))
 
 
-def vault_key_path(cfg_dir):
-    return os.path.join(cfg_dir, VAULT_KEY_NAME)
-
-
-def load_fernet(cfg_dir):
-    try:
-        from cryptography.fernet import Fernet
-    except ImportError:
-        return None
-
-    path = vault_key_path(cfg_dir)
-    if os.path.isfile(path):
-        with open(path, "rb") as handle:
-            key = handle.read().strip()
-        if key:
-            try:
-                os.chmod(path, 0o600)
-            except OSError:
-                pass
-            return Fernet(key)
-        return None
-
-    key = Fernet.generate_key()
-    with open(path, "wb") as handle:
-        handle.write(key)
-    try:
-        os.chmod(path, 0o600)
-    except OSError:
-        pass
-    return Fernet(key)
-
-
-def encrypt_secret(fernet, value):
-    if not value:
-        return ""
-    return fernet.encrypt(value.encode("utf-8")).decode("ascii")
-
-
-def decrypt_secret(fernet, value):
-    if not value:
-        return ""
-    return fernet.decrypt(value.encode("ascii")).decode("utf-8")
-
-
-def save_json(path, data):
-    with open(path, "w", encoding="utf-8") as handle:
-        json.dump(data, handle, indent=2)
-        handle.write("\n")
-
-
-def resolve_gslt_token(settings, cfg_dir, server_json_path):
-    """Decrypt token_enc for launch; persist encrypted form and clear plaintext on disk."""
-    plaintext = clean_str(settings.get("token", ""))
-    encrypted = clean_str(settings.get(TOKEN_ENC_FIELD, ""))
-    fernet = load_fernet(cfg_dir)
-
-    if fernet is None:
-        if encrypted:
-            print(
-                "WARNING: token_enc is set but python3-cryptography is not installed. "
-                "Install it on Linux (apt install python3-cryptography) or use plaintext token only.",
-                file=sys.stderr,
-            )
-        return plaintext
-
-    if plaintext:
-        settings[TOKEN_ENC_FIELD] = encrypt_secret(fernet, plaintext)
-        settings["token"] = ""
-        save_json(server_json_path, settings)
-        print("GSLT encrypted at rest in cfg/server.json (plaintext cleared from disk).", file=sys.stderr)
-        return plaintext
-
-    if encrypted:
-        try:
-            return decrypt_secret(fernet, encrypted)
-        except Exception as exc:
-            print(f"ERROR: Failed to decrypt token_enc: {exc}", file=sys.stderr)
-            sys.exit(1)
-
-    return ""
-
-
 def main():
     cfg_dir = os.path.join(BASE, "cfg")
     server_dir = BASE
@@ -202,8 +118,6 @@ def main():
 
     settings = load_json(os.path.join(cfg_dir, "server.json"), {})
     season = load_json(os.path.join(cfg_dir, "season.json"), {})
-    server_json_path = os.path.join(cfg_dir, "server.json")
-    gslt_token = resolve_gslt_token(settings, cfg_dir, server_json_path)
 
     event = season.get("event", {})
     if not event.get("track"):
@@ -257,7 +171,7 @@ def main():
         "property_3": as_bool(settings.get("property_3"), False),
         "entry_list_server_url": clean_str(settings.get("entry_list_server_url", "")),
         "results_post_url": clean_str(settings.get("results_post_url", "")),
-        "token": gslt_token,
+        "token": clean_str(settings.get("token", "")),
         "tuning_type": tuning_type_for(settings),
         "entry_list_path": clean_str(settings.get("entry_list_path", "")),
         "results_path": clean_str(settings.get("results_path", "")),
