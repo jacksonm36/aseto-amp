@@ -9,6 +9,7 @@
   "spectator_password": "",
   "admin_password": "",
   "token": "",
+  "token_enc": "",
   "tuning_type": "TuningAllowed",
   "netcode_update_interval": 20,
   "entry_list_server_url": "",
