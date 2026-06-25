@@ -98,10 +98,23 @@ def tuning_type_for(settings):
     return tuning_type
 
 
+def server_installed(server_dir):
+    return os.path.isfile(os.path.join(server_dir, "AssettoCorsaEVOServer.exe"))
+
+
 def main():
     cfg_dir = os.path.join(BASE, "cfg")
     server_dir = BASE
     os.makedirs(cfg_dir, exist_ok=True)
+
+    if not server_installed(server_dir):
+        print(
+            "ERROR: Dedicated server files are not installed. Run Update on this instance and "
+            "log in with a Steam account that owns Assetto Corsa EVO (App ID 3058630). "
+            "Anonymous SteamCMD login returns 'No subscription' for app 4564210.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     settings = load_json(os.path.join(cfg_dir, "server.json"), {})
     season = load_json(os.path.join(cfg_dir, "season.json"), {})
@@ -114,7 +127,11 @@ def main():
             season["event"] = event
 
     if not event.get("track"):
-        print("ERROR: No track configured and events_practice.json could not be read.", file=sys.stderr)
+        print(
+            "ERROR: No track configured in cfg/season.json and events_practice.json could not be read. "
+            "Set Track ID / Layout / Event Name in Configuration, or ensure the server installed correctly.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     season.setdefault("export_json", False)

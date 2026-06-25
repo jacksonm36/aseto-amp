@@ -58,7 +58,7 @@
         "UpdateStageName": "Launch Prepare Script Download",
         "UpdateSourcePlatform": "All",
         "UpdateSource": "FetchURL",
-        "UpdateSourceData": "https://raw.githubusercontent.com/jacksonm36/aseto-amp/v1.5/assetto-corsa-evoprepare.py",
+        "UpdateSourceData": "https://raw.githubusercontent.com/jacksonm36/aseto-amp/v1.7/assetto-corsa-evoprepare.py",
         "UpdateSourceArgs": "prepare_launch.py",
         "UpdateSourceTarget": "{{$FullBaseDir}}",
         "OverwriteExistingFiles": true,

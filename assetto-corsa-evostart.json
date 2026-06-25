@@ -12,7 +12,7 @@
         "UpdateSourcePlatform": "Linux",
         "UpdateSource": "Executable",
         "UpdateSourceData": "/bin/bash",
-        "UpdateSourceArgs": "-c \"python3 \\\"{{$FullBaseDir}}prepare_launch.py\\\" \\\"{{$FullBaseDir}}\\\" || python \\\"{{$FullBaseDir}}prepare_launch.py\\\" \\\"{{$FullBaseDir}}\\\"\"",
+        "UpdateSourceArgs": "-c \"if ! command -v python3 >/dev/null 2>&1; then echo 'ERROR: python3 is not installed in the container. Recreate the instance or add python3 to ExtraContainerPackages.'; exit 1; fi; python3 \\\"{{$FullBaseDir}}prepare_launch.py\\\" \\\"{{$FullBaseDir}}\\\"\"",
         "SkipOnFailure": false
     }
 ]
