@@ -46,7 +46,7 @@
         "UpdateStageName": "Server Settings Download",
         "UpdateSourcePlatform": "All",
         "UpdateSource": "FetchURL",
-        "UpdateSourceData": "https://raw.githubusercontent.com/jacksonm36/aseto-amp/v1.8/assetto-corsa-evoserver.json",
+        "UpdateSourceData": "https://raw.githubusercontent.com/jacksonm36/aseto-amp/v1.8.1/assetto-corsa-evoserver.json",
         "UpdateSourceArgs": "server.json",
         "UpdateSourceTarget": "{{$FullBaseDir}}cfg",
         "OverwriteExistingFiles": false,
