@@ -35,10 +35,18 @@
         "SkipOnFailure": false
     },
     {
+        "UpdateStageName": "Install Python3 (Linux)",
+        "UpdateSourcePlatform": "Linux",
+        "UpdateSource": "Executable",
+        "UpdateSourceData": "/bin/bash",
+        "UpdateSourceArgs": "-c \"command -v python3 >/dev/null 2>&1 || (export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && apt-get install -y -qq python3)\"",
+        "SkipOnFailure": false
+    },
+    {
         "UpdateStageName": "Server Settings Download",
         "UpdateSourcePlatform": "All",
         "UpdateSource": "FetchURL",
-        "UpdateSourceData": "https://raw.githubusercontent.com/jacksonm36/aseto-amp/v1.5/assetto-corsa-evoserver.json",
+        "UpdateSourceData": "https://raw.githubusercontent.com/jacksonm36/aseto-amp/v1.8/assetto-corsa-evoserver.json",
         "UpdateSourceArgs": "server.json",
         "UpdateSourceTarget": "{{$FullBaseDir}}cfg",
         "OverwriteExistingFiles": false,
@@ -48,7 +56,7 @@
         "UpdateStageName": "Season Settings Download",
         "UpdateSourcePlatform": "All",
         "UpdateSource": "FetchURL",
-        "UpdateSourceData": "https://raw.githubusercontent.com/jacksonm36/aseto-amp/v1.5/assetto-corsa-evoseason.json",
+        "UpdateSourceData": "https://raw.githubusercontent.com/jacksonm36/aseto-amp/v1.8/assetto-corsa-evoseason.json",
         "UpdateSourceArgs": "season.json",
         "UpdateSourceTarget": "{{$FullBaseDir}}cfg",
         "OverwriteExistingFiles": false,
@@ -58,7 +66,7 @@
         "UpdateStageName": "Launch Prepare Script Download",
         "UpdateSourcePlatform": "All",
         "UpdateSource": "FetchURL",
-        "UpdateSourceData": "https://raw.githubusercontent.com/jacksonm36/aseto-amp/v1.7/assetto-corsa-evoprepare.py",
+        "UpdateSourceData": "https://raw.githubusercontent.com/jacksonm36/aseto-amp/v1.8/assetto-corsa-evoprepare.py",
         "UpdateSourceArgs": "prepare_launch.py",
         "UpdateSourceTarget": "{{$FullBaseDir}}",
         "OverwriteExistingFiles": true,
