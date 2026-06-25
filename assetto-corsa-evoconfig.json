@@ -104,7 +104,7 @@
         "DisplayName": "Game Server Login Token (GSLT)",
         "Category": "Assetto Corsa EVO:stadia_controller",
         "Subcategory": "Server:dns:1",
-        "Description": "Sets the [Steam Game Server Login Token](https://steamcommunity.com/dev/managegameservers) passed to the server in the launch config. Generate one using App ID 3058630 (Assetto Corsa EVO). App ID 4564210 is the dedicated server tool and may not be accepted on Steam's token page. Leave empty if you are not using a token",
+        "Description": "Your [Steam Game Server Login Token](https://steamcommunity.com/dev/managegameservers) (App ID 3058630). Used when the server starts — this is NOT your Steam username/password and is NOT used by Steam Update. Paste the token here, Save, then Restart the instance. Leave empty if not using a token",
         "Keywords": "steam,server,login,token,gslt",
         "FieldName": "token",
         "InputType": "password",
