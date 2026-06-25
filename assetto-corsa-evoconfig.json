@@ -323,6 +323,20 @@
         }
     },
     {
+        "DisplayName": "Proton GE Release Version (Linux)",
+        "Category": "Assetto Corsa EVO:stadia_controller",
+        "Subcategory": "Updates:system_update:3",
+        "Description": "Proton GE version to install on Linux. Leave empty for latest. Example: GE-Proton9-1",
+        "Keywords": "proton,release,version,linux",
+        "FieldName": "SpecificReleaseVersion",
+        "InputType": "text",
+        "ParamFieldName": "SpecificReleaseVersion",
+        "IncludeInCommandLine": false,
+        "DefaultValue": "",
+        "Placeholder": "GE-Proton9-1",
+        "EnumValues": {}
+    },
+    {
         "DisplayName": "Server Config Payload",
         "Category": "Assetto Corsa EVO:stadia_controller",
         "Subcategory": "Server:dns:1",

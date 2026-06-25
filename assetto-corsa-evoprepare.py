@@ -10,6 +10,16 @@ import zlib
 BASE = sys.argv[1] if len(sys.argv) > 1 else os.getcwd()
 
 
+def as_bool(value, default=False):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "1", "yes")
+    if isinstance(value, (int, float)):
+        return value != 0
+    return default
+
+
 def encode_payload(obj):
     data = json.dumps(obj, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     compressor = zlib.compressobj(level=9, wbits=-zlib.MAX_WBITS)
@@ -84,7 +94,7 @@ def main():
         "server_http_port": http_port,
         "server_name": settings.get("server_name", "Assetto Corsa EVO Server - Powered by AMP"),
         "max_players": int(settings.get("max_players", 16)),
-        "cycle": bool(settings.get("cycle", True)),
+        "cycle": as_bool(settings.get("cycle"), True),
         "allowed_cars_list_full": build_allowed_cars(server_dir),
         "driver_password": settings.get("driver_password", ""),
         "spectator_password": settings.get("spectator_password", ""),
