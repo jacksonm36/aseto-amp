@@ -204,10 +204,14 @@ def main():
     with open(os.path.join(cfg_dir, "launch.json"), "w", encoding="utf-8") as handle:
         json.dump(launch, handle, indent=2)
 
-    settings["serverconfig"] = launch["serverconfig"]
-    settings["seasondefinition"] = launch["seasondefinition"]
-    with open(os.path.join(cfg_dir, "server.json"), "w", encoding="utf-8") as handle:
-        json.dump(settings, handle, indent=2)
+    wrapper = os.path.join(server_dir, "launch_server.sh")
+    with open(wrapper, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write("#!/bin/bash\n")
+        handle.write(f'exec "${{0%/*}}/../.proton/proton" runinprefix '
+                     f'"${{0%/*}}/AssettoCorsaEVOServer.exe" '
+                     f'-serverconfig {launch["serverconfig"]} '
+                     f'-seasondefinition {launch["seasondefinition"]}\n')
+    os.chmod(wrapper, 0o755)
 
     print(f"Prepared launch payloads for '{config['server_name']}' on TCP/UDP {tcp_port}, HTTP {http_port}.")
 
