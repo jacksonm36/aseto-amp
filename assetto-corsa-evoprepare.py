@@ -161,8 +161,8 @@ def main():
     game_config.pop("time_multiplier", None)
     season["game_config"] = game_config
 
-    tcp_port = int(settings.get("server_tcp_listener_port", 9700))
-    udp_port = int(settings.get("server_udp_listener_port", tcp_port))
+    udp_port = int(settings.get("server_udp_listener_port", 9700))
+    tcp_port = udp_port
     http_port = int(settings.get("server_http_port", 8081))
 
     config = {
