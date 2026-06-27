@@ -196,11 +196,7 @@ def main():
 
     log_lines.append(f"[prepare] Final ports: TCP={tcp_port} UDP={udp_port} HTTP={http_port}")
     for line in log_lines:
-        print(line, file=sys.stderr)
-
-    log_path = os.path.join(cfg_dir, "prepare_debug.log")
-    with open(log_path, "w") as f:
-        f.write("\n".join(log_lines) + "\n")
+        print(line)
 
     config = {
         "server_tcp_listener_port": tcp_port,
@@ -242,25 +238,17 @@ def main():
         json.dump(launch, handle, indent=2)
 
     wrapper = os.path.join(server_dir, "launch_server.sh")
-    debug_log = os.path.join(cfg_dir, "launch_debug.log")
     with open(wrapper, "w", encoding="utf-8", newline="\n") as handle:
         handle.write("#!/bin/bash\n")
-        handle.write(f'LOG="{debug_log}"\n')
-        handle.write('echo "=== Launch $(date -Iseconds) ===" >> "$LOG"\n')
-        handle.write('echo "PID: $$" >> "$LOG"\n')
-        handle.write('echo "PWD: $(pwd)" >> "$LOG"\n')
-        handle.write('echo "USER: $(whoami)" >> "$LOG"\n')
-        handle.write('echo "Ports:" >> "$LOG"\n')
-        handle.write(f'echo "  TCP/UDP listener: {tcp_port}" >> "$LOG"\n')
-        handle.write(f'echo "  HTTP: {http_port}" >> "$LOG"\n')
-        handle.write('echo "Network interfaces:" >> "$LOG"\n')
-        handle.write('ip addr show 2>/dev/null | grep "inet " >> "$LOG" 2>&1\n')
-        handle.write('echo "Listening ports before launch:" >> "$LOG"\n')
-        handle.write(f'ss -tlnp 2>/dev/null | grep -E "{tcp_port}|{http_port}" >> "$LOG" 2>&1\n')
-        handle.write(f'ss -ulnp 2>/dev/null | grep "{udp_port}" >> "$LOG" 2>&1\n')
-        handle.write('echo "ENV:" >> "$LOG"\n')
-        handle.write('env | grep -iE "steam|proton|wine|home|display" >> "$LOG" 2>&1\n')
-        handle.write('echo "Launching server..." >> "$LOG"\n')
+        handle.write('echo "[launch] === Launch $(date -Iseconds) ==="\n')
+        handle.write('echo "[launch] PID: $$ | USER: $(whoami) | PWD: $(pwd)"\n')
+        handle.write(f'echo "[launch] Ports: TCP/UDP={tcp_port} HTTP={http_port}"\n')
+        handle.write('echo "[launch] Network:"\n')
+        handle.write('ip addr show 2>/dev/null | grep "inet " | sed "s/^/[launch]   /"\n')
+        handle.write('echo "[launch] Listening before launch:"\n')
+        handle.write(f'ss -tlnp 2>/dev/null | grep -E "{tcp_port}|{http_port}" | sed "s/^/[launch]   /"\n')
+        handle.write(f'ss -ulnp 2>/dev/null | grep "{udp_port}" | sed "s/^/[launch]   /"\n')
+        handle.write('echo "[launch] Starting AssettoCorsaEVOServer.exe via Proton..."\n')
         handle.write(f'exec "${{0%/*}}/../.proton/proton" runinprefix '
                      f'"${{0%/*}}/AssettoCorsaEVOServer.exe" '
                      f'-serverconfig {launch["serverconfig"]} '
