@@ -1,21 +1,5 @@
 [
     {
-        "UpdateStageName": "Clear Cached Steam Credentials",
-        "UpdateSourcePlatform": "Windows",
-        "UpdateSource": "Executable",
-        "UpdateSourceData": "cmd.exe",
-        "UpdateSourceArgs": "/c del /q {{$FullRootDir}}config\\config.vdf 2>nul & del /q {{$FullRootDir}}ssfn* 2>nul & exit /b 0",
-        "SkipOnFailure": true
-    },
-    {
-        "UpdateStageName": "Clear Cached Steam Credentials",
-        "UpdateSourcePlatform": "Linux",
-        "UpdateSource": "Executable",
-        "UpdateSourceData": "/bin/bash",
-        "UpdateSourceArgs": "-c \"rm -f '{{$FullRootDir}}config/config.vdf' '{{$FullRootDir}}'ssfn* 2>/dev/null; exit 0\"",
-        "SkipOnFailure": true
-    },
-    {
         "UpdateStageName": "SteamCMD Server Download",
         "UpdateSourcePlatform": "Windows",
         "UpdateSource": "SteamCMD",
