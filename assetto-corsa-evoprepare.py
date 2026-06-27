@@ -141,7 +141,25 @@ def main():
     season.setdefault("weather_type", "GameModeSelectionWeatherType_CLEAR")
     season.setdefault("weather_behaviour", "GameModeSelectionWeatherBehaviour_STATIC")
     season.setdefault("initial_grip", "InitialGrip_GREEN")
-    season.setdefault("game_config", season.get("game_config") or {"practice_duration": 1200})
+
+    if event.get("track_length") is not None:
+        event["track_length"] = str(event["track_length"])
+
+    game_config = season.get("game_config") or {}
+    game_config.setdefault("practice_duration", 1200)
+    game_config.setdefault("practice_time_of_day", {
+        "year": 2024, "month": 8, "day": 15,
+        "hour": int(game_config.get("hour_of_day", 16)),
+        "minute": 0, "second": 0,
+        "time_multiplier": int(game_config.get("time_multiplier", 1)),
+    })
+    game_config.setdefault("practice_overtime_waiting_next_session",
+                           int(game_config.get("practice_overtime_waiting_next_session", 10)))
+    game_config.setdefault("practice_max_wait_to_box",
+                           int(game_config.get("practice_max_wait_to_box", 10)))
+    game_config.pop("hour_of_day", None)
+    game_config.pop("time_multiplier", None)
+    season["game_config"] = game_config
 
     tcp_port = int(settings.get("server_tcp_listener_port", 9700))
     udp_port = int(settings.get("server_udp_listener_port", tcp_port))
