@@ -411,7 +411,6 @@
         "IsFlagArgument": false,
         "ParamFieldName": "serverconfig",
         "IncludeInCommandLine": true,
-        "ExcludeFromImport": true,
         "EnumValues": {}
     },
     {
@@ -426,7 +425,6 @@
         "IsFlagArgument": false,
         "ParamFieldName": "seasondefinition",
         "IncludeInCommandLine": true,
-        "ExcludeFromImport": true,
         "EnumValues": {}
     }
 ]

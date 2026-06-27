@@ -14,7 +14,7 @@
     {
         "ConfigFile": "cfg/launch.json",
         "AutoMap": true,
-        "Importable": false,
+        "Importable": true,
         "ConfigType": "json"
     }
 ]
