@@ -163,7 +163,6 @@ def main():
 
     udp_port = int(settings.get("server_udp_listener_port", 9700))
     tcp_port = udp_port
-    internal_port = udp_port + 1
     http_port = int(settings.get("server_http_port", 8081))
     try:
         import socket
@@ -176,8 +175,8 @@ def main():
     config = {
         "server_tcp_listener_port": tcp_port,
         "server_udp_listener_port": udp_port,
-        "server_tcp_internal_port": internal_port,
-        "server_udp_internal_port": internal_port,
+        "server_tcp_internal_port": tcp_port,
+        "server_udp_internal_port": udp_port,
         "server_http_port": http_port,
         "server_name": clean_str(
             settings.get("server_name", "Assetto Corsa EVO Server - Powered by AMP"),
