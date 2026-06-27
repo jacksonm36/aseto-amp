@@ -41,8 +41,11 @@ def encode_payload(obj):
 
 def load_json(path, default=None):
     if os.path.isfile(path):
-        with open(path, encoding="utf-8") as handle:
-            return json.load(handle)
+        try:
+            with open(path, encoding="utf-8") as handle:
+                return json.load(handle)
+        except (json.JSONDecodeError, ValueError):
+            print(f"WARNING: Failed to parse {path}, using defaults.", file=sys.stderr)
     return default if default is not None else {}
 
 
@@ -70,7 +73,7 @@ def build_allowed_cars(server_dir):
         return []
     try:
         cars = load_json(cars_path, {}).get("cars", [])
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, TypeError, ValueError):
         return []
     selected = [car for car in cars if car.get("is_selected")]
     if not selected:
@@ -171,7 +174,6 @@ def main():
         "property_3": as_bool(settings.get("property_3"), False),
         "entry_list_server_url": clean_str(settings.get("entry_list_server_url", "")),
         "results_post_url": clean_str(settings.get("results_post_url", "")),
-        "token": clean_str(settings.get("token", "")),
         "tuning_type": tuning_type_for(settings),
         "entry_list_path": clean_str(settings.get("entry_list_path", "")),
         "results_path": clean_str(settings.get("results_path", "")),
