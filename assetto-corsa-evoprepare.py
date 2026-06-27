@@ -3,11 +3,20 @@
 import base64
 import json
 import os
+import socket
 import struct
+import subprocess
 import sys
+import time
 import zlib
+from datetime import datetime
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else os.getcwd()
+
+
+def amplog(component, level, message):
+    ts = datetime.now().strftime("%H:%M:%S")
+    print(f"[{ts}] [{component} {level}/1]  : {message}")
 
 LAUNCH_PATHS = {
     "GameModeType_PRACTICE": "content\\data\\practice.seasondefinition",
@@ -165,38 +174,80 @@ def main():
     tcp_port = udp_port
     http_port = int(settings.get("server_http_port", 8081))
 
-    import socket
-    log_lines = []
-    log_lines.append(f"[prepare] UDP port: {udp_port}, TCP port: {tcp_port}, HTTP port: {http_port}")
-    for check_port in [tcp_port, udp_port, http_port]:
-        for proto, stype in [("TCP", socket.SOCK_STREAM), ("UDP", socket.SOCK_DGRAM)]:
-            try:
-                with socket.socket(socket.AF_INET, stype) as s:
-                    s.settimeout(0.5)
-                    if stype == socket.SOCK_STREAM:
-                        result = s.connect_ex(("127.0.0.1", check_port))
-                        status = "IN USE" if result == 0 else "free"
-                    else:
-                        try:
-                            s.bind(("0.0.0.0", check_port))
-                            status = "free"
-                        except OSError as e:
-                            status = f"IN USE ({e})"
-                    log_lines.append(f"[prepare]   {proto} {check_port}: {status}")
-            except OSError as e:
-                log_lines.append(f"[prepare]   {proto} {check_port}: error ({e})")
+    amplog("Prepare Info", "Info", f"Requested ports: TCP={tcp_port} UDP={udp_port} HTTP={http_port}")
+
+    for check_port in sorted(set([tcp_port, http_port])):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(0.5)
+                result = s.connect_ex(("127.0.0.1", check_port))
+                if result == 0:
+                    amplog("Prepare Warning", "Warning", f"TCP port {check_port} is IN USE")
+                else:
+                    amplog("Prepare Info", "Info", f"TCP port {check_port} is free")
+        except OSError as e:
+            amplog("Prepare Error", "Error", f"TCP port {check_port} check failed: {e}")
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.bind(("0.0.0.0", udp_port))
+            amplog("Prepare Info", "Info", f"UDP port {udp_port} is free")
+    except OSError as e:
+        amplog("Prepare Warning", "Warning", f"UDP port {udp_port} is IN USE: {e}")
 
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             if s.connect_ex(("127.0.0.1", http_port)) == 0:
-                log_lines.append(f"[prepare] HTTP port {http_port} conflict detected, bumping to {http_port + 1}")
+                amplog("Prepare Warning", "Warning", f"HTTP port {http_port} conflict with AMP webserver, bumping to {http_port + 1}")
                 http_port += 1
     except OSError:
         pass
 
-    log_lines.append(f"[prepare] Final ports: TCP={tcp_port} UDP={udp_port} HTTP={http_port}")
-    for line in log_lines:
-        print(line)
+    try:
+        hostname = socket.gethostname()
+        local_ip = socket.gethostbyname(hostname)
+        amplog("Network Info", "Info", f"Hostname: {hostname} | Local IP: {local_ip}")
+    except Exception:
+        pass
+
+    try:
+        result = subprocess.run(["ip", "addr", "show"], capture_output=True, text=True, timeout=5)
+        for line in result.stdout.splitlines():
+            if "inet " in line:
+                amplog("Network Info", "Info", f"Interface: {line.strip()}")
+    except Exception:
+        pass
+
+    try:
+        result = subprocess.run(["ip", "route", "show", "default"], capture_output=True, text=True, timeout=5)
+        for line in result.stdout.splitlines():
+            amplog("Network Info", "Info", f"Default route: {line.strip()}")
+    except Exception:
+        pass
+
+    try:
+        public_ip = subprocess.run(["curl", "-s", "--connect-timeout", "3", "https://api.ipify.org"],
+                                   capture_output=True, text=True, timeout=5).stdout.strip()
+        if public_ip:
+            amplog("Network Info", "Info", f"Public IP: {public_ip}")
+    except Exception:
+        pass
+
+    try:
+        backend_ip = socket.gethostbyname("c.gk.sd")
+        amplog("Network Info", "Info", f"Backend server c.gk.sd resolves to: {backend_ip}")
+    except Exception as e:
+        amplog("Network Error", "Error", f"Cannot resolve backend c.gk.sd: {e}")
+
+    try:
+        result = subprocess.run(["ss", "-tlnp"], capture_output=True, text=True, timeout=5)
+        for line in result.stdout.splitlines():
+            if any(str(p) in line for p in [tcp_port, http_port]):
+                amplog("Network Warning", "Warning", f"Port already listening: {line.strip()}")
+    except Exception:
+        pass
+
+    amplog("Prepare Info", "Info", f"Final ports: TCP={tcp_port} UDP={udp_port} HTTP={http_port}")
 
     config = {
         "server_tcp_listener_port": tcp_port,
@@ -240,15 +291,35 @@ def main():
     wrapper = os.path.join(server_dir, "launch_server.sh")
     with open(wrapper, "w", encoding="utf-8", newline="\n") as handle:
         handle.write("#!/bin/bash\n")
-        handle.write('echo "[launch] === Launch $(date -Iseconds) ==="\n')
-        handle.write('echo "[launch] PID: $$ | USER: $(whoami) | PWD: $(pwd)"\n')
-        handle.write(f'echo "[launch] Ports: TCP/UDP={tcp_port} HTTP={http_port}"\n')
-        handle.write('echo "[launch] Network:"\n')
-        handle.write('ip addr show 2>/dev/null | grep "inet " | sed "s/^/[launch]   /"\n')
-        handle.write('echo "[launch] Listening before launch:"\n')
-        handle.write(f'ss -tlnp 2>/dev/null | grep -E "{tcp_port}|{http_port}" | sed "s/^/[launch]   /"\n')
-        handle.write(f'ss -ulnp 2>/dev/null | grep "{udp_port}" | sed "s/^/[launch]   /"\n')
-        handle.write('echo "[launch] Starting AssettoCorsaEVOServer.exe via Proton..."\n')
+        handle.write('amplog() { echo "[$(date +%H:%M:%S)] [$1/$2]  : $3"; }\n')
+        handle.write('amplog "Launch Info" "Info" "=== Server Launch ==="\n')
+        handle.write('amplog "Launch Info" "Info" "PID: $$ | USER: $(whoami)"\n')
+        handle.write('amplog "Launch Info" "Info" "Working directory: $(pwd)"\n')
+        handle.write(f'amplog "Launch Info" "Info" "Game ports: TCP/UDP {tcp_port}"\n')
+        handle.write(f'amplog "Launch Info" "Info" "HTTP port: {http_port}"\n')
+        handle.write('amplog "Network Info" "Info" "Network interfaces:"\n')
+        handle.write('ip addr show 2>/dev/null | grep "inet " | while read line; do amplog "Network Info" "Info" "  $line"; done\n')
+        handle.write('amplog "Network Info" "Info" "Default route: $(ip route show default 2>/dev/null | head -1)"\n')
+        handle.write('amplog "Network Info" "Info" "Checking port availability before bind:"\n')
+        handle.write(f'TCP_CHECK=$(ss -tlnp 2>/dev/null | grep ":{tcp_port} ")\n')
+        handle.write(f'UDP_CHECK=$(ss -ulnp 2>/dev/null | grep ":{udp_port} ")\n')
+        handle.write(f'HTTP_CHECK=$(ss -tlnp 2>/dev/null | grep ":{http_port} ")\n')
+        handle.write('[ -n "$TCP_CHECK" ] && amplog "Network Warning" "Warning" "TCP port already bound: $TCP_CHECK" || amplog "Network Info" "Info" "TCP port free"\n')
+        handle.write('[ -n "$UDP_CHECK" ] && amplog "Network Warning" "Warning" "UDP port already bound: $UDP_CHECK" || amplog "Network Info" "Info" "UDP port free"\n')
+        handle.write('[ -n "$HTTP_CHECK" ] && amplog "Network Warning" "Warning" "HTTP port already bound: $HTTP_CHECK" || amplog "Network Info" "Info" "HTTP port free"\n')
+        handle.write('amplog "Network Info" "Info" "NAT/iptables PREROUTING rules:"\n')
+        handle.write('/usr/sbin/iptables -t nat -L PREROUTING -n 2>/dev/null | while read line; do amplog "Network Info" "Info" "  $line"; done\n')
+        handle.write('amplog "Launch Info" "Info" "Starting AssettoCorsaEVOServer.exe via Proton..."\n')
+        handle.write('(\n')
+        handle.write('  sleep 5\n')
+        handle.write(f'  TCP_AFTER=$(ss -tlnp 2>/dev/null | grep ":{tcp_port} ")\n')
+        handle.write(f'  UDP_AFTER=$(ss -ulnp 2>/dev/null | grep ":{udp_port} ")\n')
+        handle.write(f'  HTTP_AFTER=$(ss -tlnp 2>/dev/null | grep ":{http_port} ")\n')
+        handle.write('  amplog "PostLaunch Info" "Info" "=== Post-launch port status (5s) ==="\n')
+        handle.write('  [ -n "$TCP_AFTER" ] && amplog "PostLaunch Info" "Info" "TCP: $TCP_AFTER" || amplog "PostLaunch Warning" "Warning" "TCP NOT listening"\n')
+        handle.write('  [ -n "$UDP_AFTER" ] && amplog "PostLaunch Info" "Info" "UDP: $UDP_AFTER" || amplog "PostLaunch Warning" "Warning" "UDP NOT listening"\n')
+        handle.write('  [ -n "$HTTP_AFTER" ] && amplog "PostLaunch Info" "Info" "HTTP: $HTTP_AFTER" || amplog "PostLaunch Warning" "Warning" "HTTP NOT listening"\n')
+        handle.write(') &\n')
         handle.write(f'exec "${{0%/*}}/../.proton/proton" runinprefix '
                      f'"${{0%/*}}/AssettoCorsaEVOServer.exe" '
                      f'-serverconfig {launch["serverconfig"]} '
