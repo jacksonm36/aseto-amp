@@ -164,13 +164,43 @@ def main():
     udp_port = int(settings.get("server_udp_listener_port", 9700))
     tcp_port = udp_port
     http_port = int(settings.get("server_http_port", 8081))
+
+    import socket
+    log_lines = []
+    log_lines.append(f"[prepare] UDP port: {udp_port}, TCP port: {tcp_port}, HTTP port: {http_port}")
+    for check_port in [tcp_port, udp_port, http_port]:
+        for proto, stype in [("TCP", socket.SOCK_STREAM), ("UDP", socket.SOCK_DGRAM)]:
+            try:
+                with socket.socket(socket.AF_INET, stype) as s:
+                    s.settimeout(0.5)
+                    if stype == socket.SOCK_STREAM:
+                        result = s.connect_ex(("127.0.0.1", check_port))
+                        status = "IN USE" if result == 0 else "free"
+                    else:
+                        try:
+                            s.bind(("0.0.0.0", check_port))
+                            status = "free"
+                        except OSError as e:
+                            status = f"IN USE ({e})"
+                    log_lines.append(f"[prepare]   {proto} {check_port}: {status}")
+            except OSError as e:
+                log_lines.append(f"[prepare]   {proto} {check_port}: error ({e})")
+
     try:
-        import socket
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             if s.connect_ex(("127.0.0.1", http_port)) == 0:
+                log_lines.append(f"[prepare] HTTP port {http_port} conflict detected, bumping to {http_port + 1}")
                 http_port += 1
     except OSError:
         pass
+
+    log_lines.append(f"[prepare] Final ports: TCP={tcp_port} UDP={udp_port} HTTP={http_port}")
+    for line in log_lines:
+        print(line, file=sys.stderr)
+
+    log_path = os.path.join(cfg_dir, "prepare_debug.log")
+    with open(log_path, "w") as f:
+        f.write("\n".join(log_lines) + "\n")
 
     config = {
         "server_tcp_listener_port": tcp_port,
@@ -212,8 +242,25 @@ def main():
         json.dump(launch, handle, indent=2)
 
     wrapper = os.path.join(server_dir, "launch_server.sh")
+    debug_log = os.path.join(cfg_dir, "launch_debug.log")
     with open(wrapper, "w", encoding="utf-8", newline="\n") as handle:
         handle.write("#!/bin/bash\n")
+        handle.write(f'LOG="{debug_log}"\n')
+        handle.write('echo "=== Launch $(date -Iseconds) ===" >> "$LOG"\n')
+        handle.write('echo "PID: $$" >> "$LOG"\n')
+        handle.write('echo "PWD: $(pwd)" >> "$LOG"\n')
+        handle.write('echo "USER: $(whoami)" >> "$LOG"\n')
+        handle.write('echo "Ports:" >> "$LOG"\n')
+        handle.write(f'echo "  TCP/UDP listener: {tcp_port}" >> "$LOG"\n')
+        handle.write(f'echo "  HTTP: {http_port}" >> "$LOG"\n')
+        handle.write('echo "Network interfaces:" >> "$LOG"\n')
+        handle.write('ip addr show 2>/dev/null | grep "inet " >> "$LOG" 2>&1\n')
+        handle.write('echo "Listening ports before launch:" >> "$LOG"\n')
+        handle.write(f'ss -tlnp 2>/dev/null | grep -E "{tcp_port}|{http_port}" >> "$LOG" 2>&1\n')
+        handle.write(f'ss -ulnp 2>/dev/null | grep "{udp_port}" >> "$LOG" 2>&1\n')
+        handle.write('echo "ENV:" >> "$LOG"\n')
+        handle.write('env | grep -iE "steam|proton|wine|home|display" >> "$LOG" 2>&1\n')
+        handle.write('echo "Launching server..." >> "$LOG"\n')
         handle.write(f'exec "${{0%/*}}/../.proton/proton" runinprefix '
                      f'"${{0%/*}}/AssettoCorsaEVOServer.exe" '
                      f'-serverconfig {launch["serverconfig"]} '
