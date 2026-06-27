@@ -172,7 +172,7 @@ def main():
 
     udp_port = int(settings.get("server_udp_listener_port", 9700))
     tcp_port = udp_port
-    http_port = int(settings.get("server_http_port", 8081))
+    http_port = int(settings.get("server_http_port", 8090))
 
     amplog("Prepare Info", "Info", f"Requested ports: TCP={tcp_port} UDP={udp_port} HTTP={http_port}")
 

@@ -15,7 +15,7 @@
     },
     {
         "Protocol": "TCP",
-        "Port": 8081,
+        "Port": 8090,
         "Ref": "HTTPPort",
         "Name": "HTTP Port",
         "Description": "Port for HTTP/API traffic"

@@ -2,7 +2,7 @@
   "server_name": "Assetto Corsa EVO Server - Powered by AMP",
   "server_tcp_listener_port": 9700,
   "server_udp_listener_port": 9700,
-  "server_http_port": 8081,
+  "server_http_port": 8090,
   "max_players": 16,
   "cycle": true,
   "tuning_type": "TuningAllowed",
