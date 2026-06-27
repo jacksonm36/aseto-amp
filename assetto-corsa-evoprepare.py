@@ -204,6 +204,11 @@ def main():
     with open(os.path.join(cfg_dir, "launch.json"), "w", encoding="utf-8") as handle:
         json.dump(launch, handle, indent=2)
 
+    settings["serverconfig"] = launch["serverconfig"]
+    settings["seasondefinition"] = launch["seasondefinition"]
+    with open(os.path.join(cfg_dir, "server.json"), "w", encoding="utf-8") as handle:
+        json.dump(settings, handle, indent=2)
+
     print(f"Prepared launch payloads for '{config['server_name']}' on TCP/UDP {tcp_port}, HTTP {http_port}.")
 
 
