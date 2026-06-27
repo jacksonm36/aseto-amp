@@ -10,8 +10,8 @@ import zlib
 BASE = sys.argv[1] if len(sys.argv) > 1 else os.getcwd()
 
 LAUNCH_PATHS = {
-    "GameModeType_PRACTICE": "content\\\\data\\\\practice.seasondefinition",
-    "GameModeType_RACE_WEEKEND": "content\\\\data\\\\race_weekend.seasondefinition",
+    "GameModeType_PRACTICE": "content\\data\\practice.seasondefinition",
+    "GameModeType_RACE_WEEKEND": "content\\data\\race_weekend.seasondefinition",
 }
 VALID_TUNING_TYPES = {"TuningAllowed", "TuningDenied"}
 
