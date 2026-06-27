@@ -163,13 +163,21 @@ def main():
 
     udp_port = int(settings.get("server_udp_listener_port", 9700))
     tcp_port = udp_port
+    internal_port = udp_port + 1
     http_port = int(settings.get("server_http_port", 8081))
+    try:
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            if s.connect_ex(("127.0.0.1", http_port)) == 0:
+                http_port += 1
+    except OSError:
+        pass
 
     config = {
         "server_tcp_listener_port": tcp_port,
         "server_udp_listener_port": udp_port,
-        "server_tcp_internal_port": tcp_port,
-        "server_udp_internal_port": udp_port,
+        "server_tcp_internal_port": internal_port,
+        "server_udp_internal_port": internal_port,
         "server_http_port": http_port,
         "server_name": clean_str(
             settings.get("server_name", "Assetto Corsa EVO Server - Powered by AMP"),
