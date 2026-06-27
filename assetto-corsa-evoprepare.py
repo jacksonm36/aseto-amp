@@ -34,8 +34,7 @@ def clean_str(value, default=""):
 
 def encode_payload(obj):
     data = json.dumps(obj, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-    compressor = zlib.compressobj(level=9, wbits=-zlib.MAX_WBITS)
-    compressed = compressor.compress(data) + compressor.flush()
+    compressed = zlib.compress(data)
     return base64.b64encode(struct.pack(">I", len(data)) + compressed).decode("ascii")
 
 
