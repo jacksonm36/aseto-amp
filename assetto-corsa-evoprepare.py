@@ -173,80 +173,114 @@ def main():
     tcp_port = udp_port
     http_port = int(settings.get("server_http_port", 8090))
 
+    amplog("Prepare Info", "Info", "=== PRE-LAUNCH DIAGNOSTICS ===")
     amplog("Prepare Info", "Info", f"Requested ports: TCP={tcp_port} UDP={udp_port} HTTP={http_port}")
 
-    for check_port in sorted(set([tcp_port, http_port])):
+    def run_cmd(cmd, timeout=5):
         try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(0.5)
-                result = s.connect_ex(("127.0.0.1", check_port))
-                if result == 0:
-                    amplog("Prepare Warning", "Warning", f"TCP port {check_port} is IN USE")
-                else:
-                    amplog("Prepare Info", "Info", f"TCP port {check_port} is free")
-        except OSError as e:
-            amplog("Prepare Error", "Error", f"TCP port {check_port} check failed: {e}")
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+            return r.stdout.strip()
+        except Exception:
+            return ""
 
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            s.bind(("0.0.0.0", udp_port))
-            amplog("Prepare Info", "Info", f"UDP port {udp_port} is free")
-    except OSError as e:
-        amplog("Prepare Warning", "Warning", f"UDP port {udp_port} is IN USE: {e}")
-
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            if s.connect_ex(("127.0.0.1", http_port)) == 0:
-                amplog("Prepare Warning", "Warning", f"HTTP port {http_port} conflict with AMP webserver, bumping to {http_port + 1}")
-                http_port += 1
-    except OSError:
-        pass
+    amplog("System Info", "Info", f"Python: {sys.version.split()[0]} | PID: {os.getpid()} | UID: {os.getuid()}")
+    amplog("System Info", "Info", f"Working dir: {os.getcwd()}")
+    amplog("System Info", "Info", f"Server dir: {server_dir}")
 
     try:
         hostname = socket.gethostname()
         local_ip = socket.gethostbyname(hostname)
-        amplog("Network Info", "Info", f"Hostname: {hostname} | Local IP: {local_ip}")
-    except Exception:
-        pass
+        amplog("System Info", "Info", f"Hostname: {hostname} | Resolved IP: {local_ip}")
+    except Exception as e:
+        amplog("System Warning", "Warning", f"Hostname resolution failed: {e}")
+
+    amplog("Network Info", "Info", "--- Network Interfaces ---")
+    for line in run_cmd(["ip", "addr", "show"]).splitlines():
+        if "inet " in line or "state " in line:
+            amplog("Network Info", "Info", f"  {line.strip()}")
+
+    amplog("Network Info", "Info", "--- Routing ---")
+    for line in run_cmd(["ip", "route", "show"]).splitlines():
+        amplog("Network Info", "Info", f"  {line.strip()}")
 
     try:
-        result = subprocess.run(["ip", "addr", "show"], capture_output=True, text=True, timeout=5)
-        for line in result.stdout.splitlines():
-            if "inet " in line:
-                amplog("Network Info", "Info", f"Interface: {line.strip()}")
+        public_ip = run_cmd(["curl", "-s", "--connect-timeout", "3", "https://api.ipify.org"])
+        amplog("Network Info", "Info", f"Public IP: {public_ip or 'FAILED TO DETECT'}")
     except Exception:
-        pass
-
-    try:
-        result = subprocess.run(["ip", "route", "show", "default"], capture_output=True, text=True, timeout=5)
-        for line in result.stdout.splitlines():
-            amplog("Network Info", "Info", f"Default route: {line.strip()}")
-    except Exception:
-        pass
-
-    try:
-        public_ip = subprocess.run(["curl", "-s", "--connect-timeout", "3", "https://api.ipify.org"],
-                                   capture_output=True, text=True, timeout=5).stdout.strip()
-        if public_ip:
-            amplog("Network Info", "Info", f"Public IP: {public_ip}")
-    except Exception:
-        pass
+        amplog("Network Warning", "Warning", "Public IP detection failed")
 
     try:
         backend_ip = socket.gethostbyname("c.gk.sd")
-        amplog("Network Info", "Info", f"Backend server c.gk.sd resolves to: {backend_ip}")
+        amplog("Network Info", "Info", f"Backend c.gk.sd resolves to: {backend_ip}")
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(3)
+            result = s.connect_ex((backend_ip, 6990))
+            amplog("Network Info", "Info", f"Backend WSS port 6990 reachable: {'YES' if result == 0 else 'NO (code ' + str(result) + ')'}")
     except Exception as e:
-        amplog("Network Error", "Error", f"Cannot resolve backend c.gk.sd: {e}")
+        amplog("Network Error", "Error", f"Backend connectivity check failed: {e}")
+
+    amplog("Port Check", "Info", "--- Port Conflict Scan ---")
+    all_ports = sorted(set([tcp_port, udp_port, http_port]))
+    for p in all_ports:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(0.5)
+                r = s.connect_ex(("127.0.0.1", p))
+                amplog("Port Check", "Info" if r != 0 else "Warning", f"TCP {p}: {'FREE' if r != 0 else 'IN USE'}")
+        except OSError as e:
+            amplog("Port Check", "Error", f"TCP {p}: check error ({e})")
+
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.bind(("0.0.0.0", p))
+                amplog("Port Check", "Info", f"UDP {p}: FREE")
+        except OSError as e:
+            amplog("Port Check", "Warning", f"UDP {p}: IN USE ({e})")
+
+    amplog("Port Check", "Info", "--- All Listening Sockets ---")
+    for line in run_cmd(["ss", "-tlnp"]).splitlines():
+        if "LISTEN" in line:
+            amplog("Port Check", "Info", f"  TCP: {line.strip()}")
+    for line in run_cmd(["ss", "-ulnp"]).splitlines():
+        if "UNCONN" in line:
+            amplog("Port Check", "Info", f"  UDP: {line.strip()}")
+
+    amplog("Port Check", "Info", "--- Established Connections ---")
+    for line in run_cmd(["ss", "-tnp"]).splitlines():
+        if "ESTAB" in line:
+            amplog("Port Check", "Info", f"  {line.strip()}")
 
     try:
-        result = subprocess.run(["ss", "-tlnp"], capture_output=True, text=True, timeout=5)
-        for line in result.stdout.splitlines():
-            if any(str(p) in line for p in [tcp_port, http_port]):
-                amplog("Network Warning", "Warning", f"Port already listening: {line.strip()}")
-    except Exception:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            if s.connect_ex(("127.0.0.1", http_port)) == 0:
+                amplog("Port Check", "Warning", f"HTTP port {http_port} conflict detected, bumping to {http_port + 1}")
+                http_port += 1
+    except OSError:
         pass
 
+    amplog("Firewall Info", "Info", "--- iptables NAT rules ---")
+    nat_out = run_cmd(["/usr/sbin/iptables", "-t", "nat", "-L", "-n", "-v"])
+    if nat_out:
+        for line in nat_out.splitlines():
+            amplog("Firewall Info", "Info", f"  {line.strip()}")
+    else:
+        amplog("Firewall Info", "Info", "  No NAT rules / iptables not available")
+
+    amplog("Firewall Info", "Info", "--- iptables FILTER rules ---")
+    filter_out = run_cmd(["/usr/sbin/iptables", "-L", "-n", "-v"])
+    if filter_out:
+        for line in filter_out.splitlines()[:20]:
+            amplog("Firewall Info", "Info", f"  {line.strip()}")
+    else:
+        amplog("Firewall Info", "Info", "  No filter rules / iptables not available")
+
+    amplog("Process Info", "Info", "--- Wine/Proton processes ---")
+    for line in run_cmd(["ps", "aux"]).splitlines():
+        if any(k in line.lower() for k in ["wine", "proton", "assetto", "steamcmd"]):
+            amplog("Process Info", "Info", f"  {line.strip()}")
+
     amplog("Prepare Info", "Info", f"Final ports: TCP={tcp_port} UDP={udp_port} HTTP={http_port}")
+    amplog("Prepare Info", "Info", "=== END DIAGNOSTICS ===")
 
     config = {
         "server_tcp_listener_port": tcp_port,
@@ -325,15 +359,26 @@ def main():
         handle.write('    wait $SERVER_PID 2>/dev/null\n')
         handle.write('    EC=$?\n')
         handle.write('    amplog "Monitor Error" "Error" "Server DIED before check: $LABEL (exit code: $EC)"\n')
+        handle.write('    amplog "Monitor Info" "Info" "Remaining wine/proton processes:"\n')
+        handle.write('    ps aux 2>/dev/null | grep -iE "wine|proton|assetto" | grep -v grep | while read line; do amplog "Monitor Info" "Info" "  $line"; done\n')
         handle.write('    return 1\n')
         handle.write('  fi\n')
         handle.write('  amplog "Monitor Info" "Info" "=== $LABEL ==="\n')
-        handle.write('  ss -tlnp 2>/dev/null | grep ":${GP} " | while read line; do amplog "Monitor Info" "Info" "TCP: $line"; done\n')
-        handle.write('  ss -ulnp 2>/dev/null | grep ":${GP} " | while read line; do amplog "Monitor Info" "Info" "UDP: $line"; done\n')
-        handle.write('  ss -tlnp 2>/dev/null | grep ":${HP} " | while read line; do amplog "Monitor Info" "Info" "HTTP: $line"; done\n')
+        handle.write('  amplog "Monitor Info" "Info" "Server PID $SERVER_PID: running ($(ps -o rss= -p $SERVER_PID 2>/dev/null || echo ?)KB RSS)"\n')
+        handle.write('  TCP_L=$(ss -tlnp 2>/dev/null | grep ":${GP} ")\n')
+        handle.write('  UDP_L=$(ss -ulnp 2>/dev/null | grep ":${GP} ")\n')
+        handle.write('  HTTP_L=$(ss -tlnp 2>/dev/null | grep ":${HP} ")\n')
+        handle.write('  [ -n "$TCP_L" ] && amplog "Monitor Info" "Info" "TCP ${GP}: $TCP_L" || amplog "Monitor Warning" "Warning" "TCP ${GP}: NOT listening"\n')
+        handle.write('  [ -n "$UDP_L" ] && amplog "Monitor Info" "Info" "UDP ${GP}: $UDP_L" || amplog "Monitor Warning" "Warning" "UDP ${GP}: NOT listening"\n')
+        handle.write('  [ -n "$HTTP_L" ] && amplog "Monitor Info" "Info" "HTTP ${HP}: $HTTP_L" || amplog "Monitor Warning" "Warning" "HTTP ${HP}: NOT listening"\n')
         handle.write('  CONNS=$(ss -tnp 2>/dev/null | grep ":${GP} " | wc -l)\n')
-        handle.write('  amplog "Monitor Info" "Info" "Active connections on ${GP}: ${CONNS}"\n')
-        handle.write('  amplog "Monitor Info" "Info" "Server PID $SERVER_PID: running"\n')
+        handle.write('  amplog "Monitor Info" "Info" "Active TCP connections on ${GP}: ${CONNS}"\n')
+        handle.write('  ss -tnp 2>/dev/null | grep ":${GP} " | while read line; do amplog "Monitor Info" "Info" "  CONN: $line"; done\n')
+        handle.write('  UDP_CONNS=$(ss -unp 2>/dev/null | grep ":${GP} " | wc -l)\n')
+        handle.write('  amplog "Monitor Info" "Info" "Active UDP sessions on ${GP}: ${UDP_CONNS}"\n')
+        handle.write('  WSS_CONNS=$(ss -tnp 2>/dev/null | grep ":6990 " | wc -l)\n')
+        handle.write('  amplog "Monitor Info" "Info" "WebSocket connections to backend (:6990): ${WSS_CONNS}"\n')
+        handle.write('  ss -tnp 2>/dev/null | grep ":6990 " | while read line; do amplog "Monitor Info" "Info" "  WSS: $line"; done\n')
         handle.write('}\n')
         handle.write('sleep 3 && check_ports "3s post-launch" || true\n')
         handle.write('sleep 7 && check_ports "10s post-launch" || true\n')
