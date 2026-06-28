@@ -7,7 +7,6 @@ import socket
 import struct
 import subprocess
 import sys
-import time
 import zlib
 from datetime import datetime
 
@@ -16,7 +15,7 @@ BASE = sys.argv[1] if len(sys.argv) > 1 else os.getcwd()
 
 def amplog(component, level, message):
     ts = datetime.now().strftime("%H:%M:%S")
-    print(f"[{ts}] [{component} {level}/1]  : {message}")
+    print(f"[{ts}] [{component}/{level}]  : {message}")
 
 LAUNCH_PATHS = {
     "GameModeType_PRACTICE": "content\\data\\practice.seasondefinition",
@@ -310,7 +309,6 @@ def main():
         handle.write('amplog "Network Info" "Info" "NAT/iptables PREROUTING rules:"\n')
         handle.write('/usr/sbin/iptables -t nat -L PREROUTING -n 2>/dev/null | while read line; do amplog "Network Info" "Info" "  $line"; done\n')
         handle.write('amplog "Launch Info" "Info" "Starting AssettoCorsaEVOServer.exe via Proton..."\n')
-        handle.write('amplog "Launch Info" "Info" "Proton stderr/stdout will be merged into this log"\n')
         handle.write('amplog "Launch Info" "Info" "--- BEGIN SERVER OUTPUT ---"\n')
         handle.write(f'"${{0%/*}}/../.proton/proton" runinprefix '
                      f'"${{0%/*}}/AssettoCorsaEVOServer.exe" '
@@ -318,33 +316,31 @@ def main():
                      f'-seasondefinition {launch["seasondefinition"]} 2>&1 &\n')
         handle.write('SERVER_PID=$!\n')
         handle.write('amplog "Launch Info" "Info" "Server PID: $SERVER_PID"\n')
+        handle.write('trap "amplog \\"Launch Info\\" \\"Info\\" \\"Signal received, stopping server...\\"; kill $SERVER_PID 2>/dev/null; wait $SERVER_PID 2>/dev/null; exit" INT TERM\n')
         handle.write(f'GP={tcp_port}\n')
         handle.write(f'HP={http_port}\n')
         handle.write('check_ports() {\n')
         handle.write('  local LABEL=$1\n')
-        handle.write('  amplog "Monitor Info" "Info" "=== $LABEL ==="\n')
-        handle.write('  TCP_S=$(ss -tlnp 2>/dev/null | grep ":${GP} ")\n')
-        handle.write('  UDP_S=$(ss -ulnp 2>/dev/null | grep ":${GP} ")\n')
-        handle.write('  HTTP_S=$(ss -tlnp 2>/dev/null | grep ":${HP} ")\n')
-        handle.write('  [ -n "$TCP_S" ] && amplog "Monitor Info" "Info" "TCP ${GP}: LISTENING" || amplog "Monitor Warning" "Warning" "TCP ${GP}: NOT listening"\n')
-        handle.write('  [ -n "$UDP_S" ] && amplog "Monitor Info" "Info" "UDP ${GP}: LISTENING" || amplog "Monitor Warning" "Warning" "UDP ${GP}: NOT listening"\n')
-        handle.write('  [ -n "$HTTP_S" ] && amplog "Monitor Info" "Info" "HTTP ${HP}: LISTENING" || amplog "Monitor Warning" "Warning" "HTTP ${HP}: NOT listening"\n')
-        handle.write('  CONNS=$(ss -tnp 2>/dev/null | grep ":${GP} " | wc -l)\n')
-        handle.write('  amplog "Monitor Info" "Info" "Active connections: ${CONNS}"\n')
         handle.write('  if ! kill -0 $SERVER_PID 2>/dev/null; then\n')
         handle.write('    wait $SERVER_PID 2>/dev/null\n')
         handle.write('    EC=$?\n')
-        handle.write('    amplog "Monitor Error" "Error" "Server process DIED (exit code: $EC)"\n')
+        handle.write('    amplog "Monitor Error" "Error" "Server DIED before check: $LABEL (exit code: $EC)"\n')
         handle.write('    return 1\n')
         handle.write('  fi\n')
+        handle.write('  amplog "Monitor Info" "Info" "=== $LABEL ==="\n')
+        handle.write('  ss -tlnp 2>/dev/null | grep ":${GP}\\b" | while read line; do amplog "Monitor Info" "Info" "TCP: $line"; done\n')
+        handle.write('  ss -ulnp 2>/dev/null | grep ":${GP}\\b" | while read line; do amplog "Monitor Info" "Info" "UDP: $line"; done\n')
+        handle.write('  ss -tlnp 2>/dev/null | grep ":${HP}\\b" | while read line; do amplog "Monitor Info" "Info" "HTTP: $line"; done\n')
+        handle.write('  CONNS=$(ss -tnp 2>/dev/null | grep ":${GP}\\b" | wc -l)\n')
+        handle.write('  amplog "Monitor Info" "Info" "Active connections on ${GP}: ${CONNS}"\n')
         handle.write('  amplog "Monitor Info" "Info" "Server PID $SERVER_PID: running"\n')
         handle.write('}\n')
-        handle.write('sleep 3 && check_ports "3s post-launch"\n')
-        handle.write('sleep 7 && check_ports "10s post-launch"\n')
-        handle.write('sleep 10 && check_ports "20s post-launch"\n')
-        handle.write('sleep 30 && check_ports "50s post-launch"\n')
-        handle.write('sleep 60 && check_ports "110s post-launch (pre-heartbeat)"\n')
-        handle.write('sleep 30 && check_ports "140s post-launch (post-heartbeat)"\n')
+        handle.write('sleep 3 && check_ports "3s post-launch" || true\n')
+        handle.write('sleep 7 && check_ports "10s post-launch" || true\n')
+        handle.write('sleep 10 && check_ports "20s post-launch" || true\n')
+        handle.write('sleep 30 && check_ports "50s post-launch" || true\n')
+        handle.write('sleep 60 && check_ports "110s pre-heartbeat" || true\n')
+        handle.write('sleep 30 && check_ports "140s post-heartbeat" || true\n')
         handle.write('wait $SERVER_PID 2>/dev/null\n')
         handle.write('EC=$?\n')
         handle.write('amplog "Launch Info" "Info" "--- END SERVER OUTPUT ---"\n')
