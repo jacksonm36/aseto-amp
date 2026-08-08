@@ -1,10 +1,17 @@
 [
     {
-        "Protocol": "Both",
+        "Protocol": "UDP",
         "Port": 9700,
-        "Ref": "GamePort",
-        "Name": "Game Port",
-        "Description": "TCP and UDP game traffic (ACE requires the same port for both)"
+        "Ref": "UDPPort",
+        "Name": "Game UDP Port",
+        "Description": "UDP game traffic (must match TCP)"
+    },
+    {
+        "Protocol": "TCP",
+        "Port": 9700,
+        "Ref": "TCPPort",
+        "Name": "Game TCP Port",
+        "Description": "TCP game traffic (must match UDP)"
     },
     {
         "Protocol": "TCP",

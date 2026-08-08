@@ -1,11 +1,11 @@
 [
     {
-        "DisplayName": "Game Port",
+        "DisplayName": "Game UDP Port",
         "Category": "Assetto Corsa EVO:stadia_controller",
         "Subcategory": "Network:lan:2",
-        "Description": "TCP and UDP game port. ACE requires both on the same number. Also editable under Configuration → Ports / firewall toggle",
-        "Keywords": "port,game,tcp,udp,network",
-        "FieldName": "$GamePort",
+        "Description": "UDP game port. ACE requires TCP and UDP on the same number",
+        "Keywords": "port,game,udp,network",
+        "FieldName": "$UDPPort",
         "InputType": "number",
         "Hidden": false,
         "IsFlagArgument": false,
@@ -18,19 +18,21 @@
         "EnumValues": {}
     },
     {
-        "DisplayName": "Game Port (TCP mirror)",
+        "DisplayName": "Game TCP Port",
         "Category": "Assetto Corsa EVO:stadia_controller",
         "Subcategory": "Network:lan:2",
-        "Description": "Kept in sync with Game Port (ACE TCP must match UDP)",
-        "Keywords": "",
-        "FieldName": "$GamePort",
+        "Description": "TCP game port. Must match UDP. Prepare forces TCP=UDP if they differ",
+        "Keywords": "port,game,tcp,network",
+        "FieldName": "$TCPPort",
         "InputType": "number",
-        "Hidden": true,
+        "Hidden": false,
         "IsFlagArgument": false,
         "ParamFieldName": "server_tcp_listener_port",
         "IncludeInCommandLine": false,
         "ExcludeFromImport": true,
         "DefaultValue": "9700",
+        "MinValue": "1",
+        "MaxValue": "65535",
         "EnumValues": {}
     },
     {

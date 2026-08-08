@@ -542,28 +542,17 @@ def main():
     payload_season = json.loads(json.dumps(season))
     payload_season["event"]["track_length"] = str(payload_season["event"]["track_length"])
 
-    # AC EVO expects TCP and UDP on the same port (AMP GamePort / Protocol Both).
-    # After UDPPort/TCPPort -> GamePort renames, AMP AutoMap can briefly write 0; treat that as unset.
-    try:
-        game_port = int(
-            settings.get(
-                "server_udp_listener_port",
-                settings.get("server_tcp_listener_port", 9700),
-            )
-        )
-    except (TypeError, ValueError):
-        game_port = 0
-    if game_port <= 0:
-        amplog(
-            "Port Fix",
-            "Warning",
-            "Game port was 0/missing (common after GamePort rename). Using 9700. "
-            "Set Game Port in Configuration → Network/Ports if you need another value.",
-        )
-        game_port = 9700
-    if game_port > 65535:
-        print(f"ERROR: Invalid game port {game_port}. Set Game Port in AMP (1-65535).", file=sys.stderr)
-        sys.exit(1)
+    # AC EVO expects TCP and UDP on the same port. Never fail Start if AMP wrote 0.
+    def _port(value, default=0):
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            return default
+        return value if 0 < value <= 65535 else default
+
+    udp_port = _port(settings.get("server_udp_listener_port"), 0)
+    tcp_port = _port(settings.get("server_tcp_listener_port"), 0)
+    game_port = udp_port or tcp_port or 9700
     tcp_port = game_port
     udp_port = game_port
     settings["server_tcp_listener_port"] = tcp_port
