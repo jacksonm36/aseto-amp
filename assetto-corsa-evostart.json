@@ -1,18 +1,18 @@
 [
     {
         "UpdateStageName": "Build Launch Payloads",
-        "UpdateSourcePlatform": "Windows",
+        "UpdateSourcePlatform": "Linux",
         "UpdateSource": "Executable",
-        "UpdateSourceData": "cmd.exe",
-        "UpdateSourceArgs": "/c (py -3 \"{{$FullBaseDir}}prepare_launch.py\" \"{{$FullBaseDir}}\" 2>nul) || (python \"{{$FullBaseDir}}prepare_launch.py\" \"{{$FullBaseDir}}\")",
+        "UpdateSourceData": "/usr/bin/python3",
+        "UpdateSourceArgs": "\"{{$FullBaseDir}}prepare_launch.py\" \"{{$FullBaseDir}}\"",
         "SkipOnFailure": false
     },
     {
         "UpdateStageName": "Build Launch Payloads",
-        "UpdateSourcePlatform": "Linux",
+        "UpdateSourcePlatform": "Windows",
         "UpdateSource": "Executable",
-        "UpdateSourceData": "/bin/bash",
-        "UpdateSourceArgs": "-c \"if ! command -v python3 >/dev/null 2>&1; then echo 'ERROR: python3 is not installed in the container. Recreate the instance or add python3 to ExtraContainerPackages.'; exit 1; fi; python3 \\\"{{$FullBaseDir}}prepare_launch.py\\\" \\\"{{$FullBaseDir}}\\\"\"",
+        "UpdateSourceData": "python.exe",
+        "UpdateSourceArgs": "\"{{$FullBaseDir}}prepare_launch.py\" \"{{$FullBaseDir}}\"",
         "SkipOnFailure": false
     }
 ]

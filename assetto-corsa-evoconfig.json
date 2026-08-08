@@ -445,22 +445,6 @@
         "EnumValues": {}
     },
     {
-        "DisplayName": "Enable Proton Logging (Linux)",
-        "Category": "Assetto Corsa EVO:stadia_controller",
-        "Subcategory": "Updates:system_update:3",
-        "Description": "Write Proton/Wine logs under .proton/logs and mirror them into the AMP console ([Proton] / [ProtonLog]). Disable if the console gets too noisy.",
-        "Keywords": "proton,log,logging,wine,console,linux",
-        "FieldName": "enable_proton_logging",
-        "InputType": "checkbox",
-        "ParamFieldName": "enable_proton_logging",
-        "IncludeInCommandLine": false,
-        "DefaultValue": true,
-        "EnumValues": {
-            "False": "Disabled",
-            "True": "Enabled (default)"
-        }
-    },
-    {
         "DisplayName": "Server Config Payload",
         "Category": "Assetto Corsa EVO:stadia_controller",
         "Subcategory": "Server:dns:1",
@@ -471,8 +455,7 @@
         "Hidden": true,
         "IsFlagArgument": false,
         "ParamFieldName": "serverconfig",
-        "IncludeInCommandLine": false,
-        "ExcludeFromImport": true,
+        "IncludeInCommandLine": true,
         "EnumValues": {}
     },
     {
@@ -486,8 +469,7 @@
         "Hidden": true,
         "IsFlagArgument": false,
         "ParamFieldName": "seasondefinition",
-        "IncludeInCommandLine": false,
-        "ExcludeFromImport": true,
+        "IncludeInCommandLine": true,
         "EnumValues": {}
     }
 ]
