@@ -1,28 +1,33 @@
 # `cubecoders-compliant` branch
 
-This branch reshapes the Assetto Corsa EVO Generic template toward [CubeCoders/AMPTemplates](https://github.com/CubeCoders/AMPTemplates) technical rules.
+Reshapes the ACE Generic template toward [CubeCoders/AMPTemplates](https://github.com/CubeCoders/AMPTemplates) rules: **no `.sh` / `.bat` app entrypoint**.
 
-## What changed vs `main`
+## Why a Python trampoline?
 
-| Area | `main` | `cubecoders-compliant` |
-|------|--------|------------------------|
-| App entrypoint | `launch_server.sh` / `.bat` | `AssettoCorsaEVOServer.exe` / `.proton/proton` |
-| PreStart | bash/cmd → prepare (writes wrappers + payloads) | `python3` / `python.exe` → prepare (**payloads only**) |
-| Console extras | Proton log mirror, ready poller, client IP via `ss` | Dropped (wrapper-only) |
-| Config version | `1.30` | `2.0.0-compliant` |
+ACE needs fresh zlib+base64 `-serverconfig` / `-seasondefinition` on every Start. AMP does **not** reimport `cfg/launch.json` into `FormattedArgs` after PreStart, so pointing `App.Executable*` at Proton/EXE alone launches with **empty payloads**.
 
-## Still required (ACE reality)
+This branch launches **`python3` / `python.exe`** (real executables, same class as `mono` hosts) with:
 
-ACE needs zlib+base64 `-serverconfig` / `-seasondefinition` on the command line. PreStart runs **`python3` as an Executable stage** (same helper class as official Proton-GE bash installers) to write `cfg/launch.json`, which AMP maps into CLI args.
+```text
+prepare_launch.py "{{$FullBaseDir}}" --run
+```
 
-## Not a guarantee of CubeCoders merge
+That builds payloads, then `exec`s Proton (`runinprefix AssettoCorsaEVOServer.exe …`) or the Windows EXE. AMP still monitors `AssettoCorsaEVOServer.exe` via `MonitorChildProcessName` + `DumpFullChildProcessTree`.
 
-Their README still rejects AI-generated configs and prefers a minimal file set. This branch maximizes **technical** fit for a human-reviewed draft PR; it does not claim official acceptance.
+## vs `main`
 
-## ADS usage
+| | `main` | `cubecoders-compliant` |
+|--|--------|------------------------|
+| App entry | `launch_server.sh` / `.bat` | `python3` / `python.exe` `--run` |
+| Extra console | Proton mirror, IP via `ss` | Dropped |
+| Version | `1.30` | `2.0.1-compliant` |
 
-Point the configuration repository at:
+## Flags
 
-`jacksonm36/aseto-amp:cubecoders-compliant`
+- `--run` — build + exec game
+- `--dry-run` — build only; print intent; no exec
+- `--allow-missing` — Update soft-skip if EXE not installed yet
 
-FetchURLs in this branch already pull prepare/defaults from the `cubecoders-compliant` raw paths.
+## CubeCoders merge
+
+Their README still rejects AI-generated configs. This branch is for technical fit / ADS use (`jacksonm36/aseto-amp:cubecoders-compliant`), not a guaranteed official merge.

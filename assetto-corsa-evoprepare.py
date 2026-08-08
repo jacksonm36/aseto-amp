@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build compressed -serverconfig / -seasondefinition payloads for AssettoCorsaEVOServer.exe."""
+"""Build ACE payloads; --run execs Proton/EXE with fresh args (AMP does not reimport launch.json)."""
 import base64
 import json
 import os
@@ -9,7 +9,12 @@ import sys
 import zlib
 from datetime import datetime
 
-BASE = sys.argv[1] if len(sys.argv) > 1 else os.getcwd()
+RAW_ARGS = sys.argv[1:]
+RUN = "--run" in RAW_ARGS
+ALLOW_MISSING = "--allow-missing" in RAW_ARGS
+DRY_RUN = "--dry-run" in RAW_ARGS
+POS_ARGS = [a for a in RAW_ARGS if not a.startswith("--")]
+BASE = POS_ARGS[0] if POS_ARGS else os.getcwd()
 
 LAUNCH_PATHS = {
     "GameModeType_PRACTICE": "content\\data\\practice.seasondefinition",
@@ -442,12 +447,14 @@ def main():
     os.makedirs(cfg_dir, exist_ok=True)
 
     if not server_installed(server_dir):
-        print(
-            "ERROR: Dedicated server files are not installed. Run Update on this instance and "
-            "log in with a Steam account that owns Assetto Corsa EVO (App ID 3058630). "
-            "Anonymous SteamCMD login returns 'No subscription' for app 4564210.",
-            file=sys.stderr,
+        msg = (
+            "Dedicated server files are not installed. Run Update on this instance and "
+            "log in with a Steam account that owns Assetto Corsa EVO (App ID 3058630)."
         )
+        if ALLOW_MISSING:
+            amplog("Prepare Info", "Info", msg + " (--allow-missing: skip)")
+            sys.exit(0)
+        print("ERROR: " + msg, file=sys.stderr)
         sys.exit(1)
 
     settings_path = os.path.join(cfg_dir, "server.json")
@@ -576,6 +583,35 @@ def main():
         "Info",
         f"Prepared '{config['server_name']}' — wrote cfg/launch.json payloads",
     )
+
+    if RUN or DRY_RUN:
+        exec_server(server_dir, launch["serverconfig"], launch["seasondefinition"])
+
+
+def exec_server(server_dir, serverconfig, seasondefinition):
+    """Replace this process with Proton (Linux) or the ACE exe (Windows)."""
+    exe = os.path.join(server_dir, "AssettoCorsaEVOServer.exe")
+    root_dir = os.path.abspath(os.path.join(server_dir, ".."))
+    proton = os.path.join(root_dir, ".proton", "proton")
+    args_tail = ["-serverconfig", serverconfig, "-seasondefinition", seasondefinition]
+
+    if sys.platform.startswith("linux"):
+        if not os.path.isfile(proton):
+            print(f"ERROR: Proton missing at {proton}. Run Update first.", file=sys.stderr)
+            sys.exit(1)
+        cmdline = [proton, "runinprefix", exe] + args_tail
+        amplog("Launch Info", "Info", f"Exec Proton runinprefix -> {exe}")
+        if DRY_RUN:
+            amplog("Launch Info", "Info", "Dry-run OK (payloads built; exec skipped)")
+            return
+        os.execvpe(cmdline[0], cmdline, os.environ)
+
+    cmdline = [exe] + args_tail
+    amplog("Launch Info", "Info", f"Exec {exe}")
+    if DRY_RUN:
+        amplog("Launch Info", "Info", "Dry-run OK (payloads built; exec skipped)")
+        return
+    os.execv(cmdline[0], cmdline)
 
 
 if __name__ == "__main__":

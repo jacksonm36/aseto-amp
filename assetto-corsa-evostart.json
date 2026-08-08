@@ -1,6 +1,6 @@
 [
     {
-        "UpdateStageName": "Build Launch Payloads",
+        "UpdateStageName": "Validate Launch Payloads",
         "UpdateSourcePlatform": "Linux",
         "UpdateSource": "Executable",
         "UpdateSourceData": "/usr/bin/python3",
@@ -8,11 +8,11 @@
         "SkipOnFailure": false
     },
     {
-        "UpdateStageName": "Build Launch Payloads",
+        "UpdateStageName": "Validate Launch Payloads",
         "UpdateSourcePlatform": "Windows",
         "UpdateSource": "Executable",
-        "UpdateSourceData": "python.exe",
-        "UpdateSourceArgs": "\"{{$FullBaseDir}}prepare_launch.py\" \"{{$FullBaseDir}}\"",
+        "UpdateSourceData": "cmd.exe",
+        "UpdateSourceArgs": "/c (py -3 \"{{$FullBaseDir}}prepare_launch.py\" \"{{$FullBaseDir}}\" 2>nul) || (python \"{{$FullBaseDir}}prepare_launch.py\" \"{{$FullBaseDir}}\") || (python.exe \"{{$FullBaseDir}}prepare_launch.py\" \"{{$FullBaseDir}}\")",
         "SkipOnFailure": false
     }
 ]

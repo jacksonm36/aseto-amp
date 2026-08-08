@@ -93,16 +93,16 @@
         "UpdateSourcePlatform": "Linux",
         "UpdateSource": "Executable",
         "UpdateSourceData": "/usr/bin/python3",
-        "UpdateSourceArgs": "\"{{$FullBaseDir}}prepare_launch.py\" \"{{$FullBaseDir}}\"",
+        "UpdateSourceArgs": "\"{{$FullBaseDir}}prepare_launch.py\" \"{{$FullBaseDir}}\" --allow-missing",
         "SkipOnFailure": false
     },
     {
         "UpdateStageName": "Generate Launch Payloads",
         "UpdateSourcePlatform": "Windows",
         "UpdateSource": "Executable",
-        "UpdateSourceData": "python.exe",
-        "UpdateSourceArgs": "\"{{$FullBaseDir}}prepare_launch.py\" \"{{$FullBaseDir}}\"",
-        "SkipOnFailure": false
+        "UpdateSourceData": "cmd.exe",
+        "UpdateSourceArgs": "/c (py -3 \"{{$FullBaseDir}}prepare_launch.py\" \"{{$FullBaseDir}}\" --allow-missing 2>nul) || (python \"{{$FullBaseDir}}prepare_launch.py\" \"{{$FullBaseDir}}\" --allow-missing) || (python.exe \"{{$FullBaseDir}}prepare_launch.py\" \"{{$FullBaseDir}}\" --allow-missing) || exit /b 0",
+        "SkipOnFailure": true
     },
     {
         "UpdateStageName": "Proton GE Download",
