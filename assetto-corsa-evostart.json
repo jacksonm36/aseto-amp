@@ -3,8 +3,8 @@
         "UpdateStageName": "Build Launch Payloads",
         "UpdateSourcePlatform": "Windows",
         "UpdateSource": "Executable",
-        "UpdateSourceData": "python",
-        "UpdateSourceArgs": "\"{{$FullBaseDir}}prepare_launch.py\" \"{{$FullBaseDir}}\"",
+        "UpdateSourceData": "cmd.exe",
+        "UpdateSourceArgs": "/c (py -3 \"{{$FullBaseDir}}prepare_launch.py\" \"{{$FullBaseDir}}\" 2>nul) || (python \"{{$FullBaseDir}}prepare_launch.py\" \"{{$FullBaseDir}}\")",
         "SkipOnFailure": false
     },
     {
