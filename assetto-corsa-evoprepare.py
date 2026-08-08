@@ -436,7 +436,9 @@ def apply_practice_time(game_config):
     tod.setdefault("second", 0)
 
 
-def write_linux_wrapper(server_dir, serverconfig, seasondefinition, tcp_port, http_port):
+def write_linux_wrapper(
+    server_dir, serverconfig, seasondefinition, tcp_port, http_port, proton_log=True
+):
     wrapper = os.path.join(server_dir, "launch_server.sh")
     with open(wrapper, "w", encoding="utf-8", newline="\n") as handle:
         handle.write("#!/bin/bash\n")
@@ -448,50 +450,182 @@ def write_linux_wrapper(server_dir, serverconfig, seasondefinition, tcp_port, ht
         handle.write(f'amplog "Launch Info" "Info" "Ports TCP/UDP {tcp_port}, HTTP {http_label}"\n')
         handle.write('ROOT="$(cd "${0%/*}/.." && pwd)"\n')
         handle.write('SERVER_DIR="${0%/*}"\n')
+        handle.write(f"GP={tcp_port}\n")
+        handle.write(f"HP={http_port}\n")
+        handle.write("export GP HP\n")
+        handle.write('PROTON_LOG_DIR="$ROOT/.proton/logs"\n')
+        handle.write('mkdir -p "$PROTON_LOG_DIR"\n')
+        if proton_log:
+            handle.write("export PROTON_LOG=1\n")
+            handle.write('export PROTON_LOG_DIR\n')
+            handle.write(
+                'amplog "Launch Info" "Info" '
+                '"Proton logging enabled → $PROTON_LOG_DIR (mirrored to console)"\n'
+            )
+        else:
+            handle.write("unset PROTON_LOG 2>/dev/null || true\n")
+            handle.write(
+                'amplog "Launch Info" "Info" "Proton file logging disabled"\n'
+            )
+        # Proton python stderr stays in this file; console filter drops SIGINT noise.
+        # Do NOT use bare `setsid` here: with job-control it double-forks, $! exits 0
+        # immediately, and the wrapper falsely reports "Server exited with code: 0".
+        # Instead exec Proton after ignoring INT so AMP Stop hits our trap; we TERM it.
+        handle.write('PROTON_RUN_LOG="$PROTON_LOG_DIR/proton-run.log"\n')
+        handle.write(": > \"$PROTON_RUN_LOG\"\n")
+        handle.write("(\n")
+        handle.write("  trap '' INT\n")
         handle.write(
-            '"$ROOT/.proton/proton" runinprefix '
+            '  exec "$ROOT/.proton/proton" runinprefix '
             '"$SERVER_DIR/AssettoCorsaEVOServer.exe" '
             f'-serverconfig {serverconfig} '
-            f'-seasondefinition {seasondefinition} 2>&1 &\n'
+            f'-seasondefinition {seasondefinition}\n'
         )
+        handle.write(') >>"$PROTON_RUN_LOG" 2>&1 < /dev/null &\n')
         handle.write("SERVER_PID=$!\n")
+        handle.write(
+            'amplog "Launch Info" "Info" "Proton launcher pid $SERVER_PID"\n'
+        )
         # ACE writes its game log under the Wine prefix; mirror it into AMP's console.
         handle.write(
             'ACELOG="${STEAM_COMPAT_DATA_PATH:-$ROOT/.proton/compatdata}'
             '/pfx/drive_c/users/steamuser/Saved Games/ACE-Server/'
             'Assetto Corsa EVO Server.txt"\n'
         )
-        handle.write("LOG_PID=\"\"\n")
+        handle.write("LOG_ACE_PID=\"\"\n")
+        handle.write("LOG_PROTON_PID=\"\"\n")
+        handle.write("LOG_RUN_PID=\"\"\n")
+        handle.write("READY_PID=\"\"\n")
+        # Drop Proton's SIGINT traceback blocks if AMP still signals the child tree.
+        handle.write(
+            "filter_proton_noise() {\n"
+            "  awk '\n"
+            "    /Traceback \\(most recent call last\\):/ { skip=1; next }\n"
+            "    skip && /^KeyboardInterrupt$/ { skip=0; next }\n"
+            "    skip && /^During handling of the above exception/ { next }\n"
+            "    skip && /^  File / { next }\n"
+            "    skip && /^[[:space:]]/ { next }\n"
+            "    skip { skip=0 }\n"
+            "    { print }\n"
+            "  '\n"
+            "}\n"
+            "export -f filter_proton_noise\n"
+        )
+        # When ACE reports UDP listen (often only in Wine log), also emit AMP AppReady line.
+        handle.write('READY_FLAG="$PROTON_LOG_DIR/.amp_ready"\n')
+        handle.write('PEER_IP_STATE="$PROTON_LOG_DIR/.amp_peer_ips"\n')
+        handle.write('rm -f "$READY_FLAG" "$PEER_IP_STATE"\n')
+        handle.write(": > \"$PEER_IP_STATE\"\n")
+        handle.write(
+            "emit_amp_ready() {\n"
+            '  [ -f "$READY_FLAG" ] && return 0\n'
+            '  : > "$READY_FLAG"\n'
+            '  echo "Listening to TCP ${GP} | UDP ${GP}"\n'
+            '  amplog "Monitor Info" "Info" "AMP ready signal (TCP/UDP ${GP})"\n'
+            "}\n"
+        )
+        # ACE never logs client IPs; best-effort from established TCP peers on the game port.
+        handle.write(
+            "emit_client_ip_for() {\n"
+            "  local steamid=$1\n"
+            "  local ip cand\n"
+            '  [ -n "$steamid" ] || return 0\n'
+            '  grep -q "^${steamid} " "$PEER_IP_STATE" 2>/dev/null && return 0\n'
+            '  ip=""\n'
+            '  while read -r cand; do\n'
+            '    [ -n "$cand" ] || continue\n'
+            '    grep -q " ${cand}$" "$PEER_IP_STATE" 2>/dev/null && continue\n'
+            '    ip=$cand\n'
+            "    break\n"
+            "  done < <(ss -H -tn state established \"sport = :${GP}\" 2>/dev/null "
+            "| awk '{print $NF}' | sed -n 's/^\\([0-9.]*\\):[0-9][0-9]*$/\\1/p' "
+            "| grep -vE '^(127\\.0\\.0\\.1|0\\.0\\.0\\.0)$' || true)\n"
+            '  [ -n "$ip" ] || return 0\n'
+            '  echo "${steamid} ${ip}" >> "$PEER_IP_STATE"\n'
+            '  echo "AMP_CLIENT_IP id=${steamid} ip=${ip}"\n'
+            '  amplog "Monitor Info" "Info" "Client IP for ${steamid}: ${ip}"\n'
+            "}\n"
+        )
+        handle.write(
+            "mirror_and_ready() {\n"
+            "  local PREFIX=$1 steamid\n"
+            "  while IFS= read -r line; do\n"
+            '    printf "%s %s\\n" "$PREFIX" "$line"\n'
+            '    case "$line" in\n'
+            '      *"Listening to UDP "*) emit_amp_ready ;;\n'
+            '      *"connecting gamecar "*)\n'
+            "        steamid=$(printf '%s\\n' \"$line\" | sed -n 's/.*| \\([0-9][0-9]*\\)).*/\\1/p')\n"
+            '        emit_client_ip_for "$steamid"\n'
+            "        ;;\n"
+            "    esac\n"
+            "  done\n"
+            "}\n"
+            "export -f emit_amp_ready emit_client_ip_for mirror_and_ready amplog\n"
+            "export READY_FLAG PEER_IP_STATE GP HP\n"
+        )
         handle.write(
             '( for _ in $(seq 1 60); do [ -f "$ACELOG" ] && break; sleep 1; done; '
-            'tail -n 0 -F "$ACELOG" 2>/dev/null ) &\n'
+            'tail -n 0 -F "$ACELOG" 2>/dev/null | mirror_and_ready "[ACE]" ) &\n'
         )
-        handle.write("LOG_PID=$!\n")
-        handle.write(f"GP={tcp_port}\n")
-        handle.write(f"HP={http_port}\n")
+        handle.write("LOG_ACE_PID=$!\n")
+        handle.write(
+            '( tail -n 0 -F "$PROTON_RUN_LOG" 2>/dev/null | filter_proton_noise '
+            '| mirror_and_ready "[Proton]" ) &\n'
+        )
+        handle.write("LOG_RUN_PID=$!\n")
+        if proton_log:
+            # GE/Proton writes steam-<appid>.log under PROTON_LOG_DIR when PROTON_LOG=1.
+            handle.write(
+                '( for _ in $(seq 1 90); do '
+                'PLOG=$(ls -t "$PROTON_LOG_DIR"/steam-*.log 2>/dev/null | head -1); '
+                '[ -n "$PLOG" ] && break; sleep 1; done; '
+                '[ -n "$PLOG" ] && amplog "Launch Info" "Info" "Tailing Proton log: $PLOG"; '
+                '[ -n "$PLOG" ] && tail -n 0 -F "$PLOG" 2>/dev/null | filter_proton_noise '
+                '| mirror_and_ready "[ProtonLog]" ) &\n'
+            )
+            handle.write("LOG_PROTON_PID=$!\n")
+        # Fast path for AMP STARTING→READY: poll sockets every second (do not wait 5/20/60s).
+        handle.write(
+            "( for _ in $(seq 1 120); do "
+            'kill -0 $SERVER_PID 2>/dev/null || exit 0; '
+            'TCP_L=$(ss -tlnp 2>/dev/null | grep -F ":${GP} " || true); '
+            'UDP_L=$(ss -ulnp 2>/dev/null | grep -F ":${GP} " || true); '
+            'if [ -n "$TCP_L" ] && [ -n "$UDP_L" ]; then emit_amp_ready; exit 0; fi; '
+            "sleep 1; done ) &\n"
+        )
+        handle.write("READY_PID=$!\n")
         handle.write("cleanup() {\n")
         handle.write("  # Re-entrancy guard; stream every step to AMP console (stdout).\n")
-        handle.write('  [ "${CLEANUP_STARTED:-0}" = "1" ] && return 0\n')
+        handle.write('  [ "${CLEANUP_STARTED:-0}" = "1" ] && exit 0\n')
         handle.write("  CLEANUP_STARTED=1\n")
-        handle.write("  trap - INT TERM\n")
+        handle.write("  trap '' INT TERM\n")
         handle.write("  echo\n")
         handle.write(
             '  amplog "Shutdown Info" "Info" "========== SHUTDOWN START =========="\n'
         )
         handle.write(
-            '  amplog "Shutdown Info" "Info" "Signal received - stopping ACE / Proton / Wine"\n'
+            '  amplog "Shutdown Info" "Info" "Stop requested - shutting down ACE / Proton / Wine"\n'
         )
         handle.write(
-            '  amplog "Shutdown Info" "Info" "SERVER_PID=${SERVER_PID:-?} LOG_PID=${LOG_PID:-?} GP=$GP HP=$HP"\n'
+            '  amplog "Shutdown Info" "Info" '
+            '"SERVER_PID=${SERVER_PID:-?} LOG_ACE=${LOG_ACE_PID:-?} '
+            'LOG_RUN=${LOG_RUN_PID:-?} LOG_PROTON=${LOG_PROTON_PID:-?} '
+            'READY=${READY_PID:-?} GP=$GP HP=$HP"\n'
         )
         handle.write("  sync 2>/dev/null || true\n")
         handle.write(
-            '  amplog "Shutdown Info" "Info" "Stopping ACE log tail (LOG_PID=$LOG_PID)"\n'
+            '  amplog "Shutdown Info" "Info" "Stopping log tails / ready watcher"\n'
         )
-        handle.write("  kill $LOG_PID 2>/dev/null || true\n")
         handle.write(
-            '  amplog "Shutdown Info" "Info" "Sending TERM to Proton process group (-$SERVER_PID)"\n'
+            "  kill $LOG_ACE_PID $LOG_RUN_PID $LOG_PROTON_PID $READY_PID 2>/dev/null || true\n"
         )
+        handle.write(
+            "  wait $LOG_ACE_PID $LOG_RUN_PID $LOG_PROTON_PID $READY_PID 2>/dev/null || true\n"
+        )
+        handle.write(
+            '  amplog "Shutdown Info" "Info" "Sending TERM to Proton (pid $SERVER_PID)"\n'
+        )
+        # Prefer TERM on the setsid leader + its process group (never INT → no KeyboardInterrupt).
         handle.write("  kill -TERM -$SERVER_PID $SERVER_PID 2>/dev/null || true\n")
         handle.write("  sleep 1\n")
         handle.write(
@@ -512,6 +646,9 @@ def write_linux_wrapper(server_dir, serverconfig, seasondefinition, tcp_port, ht
         handle.write(
             '  pkill -TERM -f "$ROOT/.proton/compatdata" 2>/dev/null || true\n'
         )
+        handle.write(
+            '  pkill -TERM -f "$ROOT/.proton/proton" 2>/dev/null || true\n'
+        )
         handle.write("  sleep 1\n")
         handle.write(
             '  STILL=$(pgrep -af AssettoCorsaEVOServer.exe 2>/dev/null | grep -F "$SERVER_DIR" | head -5 || true)\n'
@@ -527,6 +664,9 @@ def write_linux_wrapper(server_dir, serverconfig, seasondefinition, tcp_port, ht
         handle.write("    kill -KILL -$SERVER_PID $SERVER_PID 2>/dev/null || true\n")
         handle.write(
             '    pkill -KILL -f "$ROOT/.proton/.*/wineserver" 2>/dev/null || true\n'
+        )
+        handle.write(
+            '    pkill -KILL -f "$ROOT/.proton/proton" 2>/dev/null || true\n'
         )
         handle.write("  else\n")
         handle.write(
@@ -544,13 +684,18 @@ def write_linux_wrapper(server_dir, serverconfig, seasondefinition, tcp_port, ht
         handle.write(
             '  amplog "Shutdown Info" "Info" "========== SHUTDOWN COMPLETE =========="\n'
         )
+        handle.write(
+            '  amplog "Launch Info" "Info" "Server stopped cleanly by AMP"\n'
+        )
         handle.write("  sync 2>/dev/null || true\n")
-        # Brief pause so AMP console can flush the last lines before process exit.
+        # Exit here so we never fall back into wait → exit 130 + Proton traceback path.
         handle.write("  sleep 1\n")
+        handle.write("  exit 0\n")
         handle.write("}\n")
         handle.write("trap cleanup INT TERM\n")
         handle.write("check_ports() {\n")
         handle.write("  local LABEL=$1\n")
+        handle.write('  if [ "${CLEANUP_STARTED:-0}" = "1" ]; then return 0; fi\n')
         handle.write("  if ! kill -0 $SERVER_PID 2>/dev/null; then\n")
         handle.write("    wait $SERVER_PID 2>/dev/null\n")
         handle.write('    amplog "Monitor Error" "Error" "Server exited before $LABEL (code $?)"\n')
@@ -576,10 +721,9 @@ def write_linux_wrapper(server_dir, serverconfig, seasondefinition, tcp_port, ht
         handle.write("  else\n")
         handle.write('    amplog "Monitor Info" "Info" "HTTP: disabled"\n')
         handle.write("  fi\n")
-        # AMP AppReadyRegex: emit a console line AMP can see (ACE logs often go to a Wine file).
+        # AMP AppReadyRegex: once-only ready line (same helper as log mirror / poller).
         handle.write(
-            'if [ -n "$TCP_L" ] && [ -n "$UDP_L" ]; then '
-            'echo "Listening to TCP ${GP} | UDP ${GP}"; fi\n'
+            'if [ -n "$TCP_L" ] && [ -n "$UDP_L" ]; then emit_amp_ready; fi\n'
         )
         handle.write("}\n")
         handle.write('sleep 5 && check_ports "5s post-launch" || true\n')
@@ -587,7 +731,18 @@ def write_linux_wrapper(server_dir, serverconfig, seasondefinition, tcp_port, ht
         handle.write('sleep 40 && check_ports "60s post-launch" || true\n')
         handle.write("wait $SERVER_PID 2>/dev/null\n")
         handle.write("EC=$?\n")
-        handle.write("kill $LOG_PID 2>/dev/null\n")
+        handle.write(
+            "kill $LOG_ACE_PID $LOG_RUN_PID $LOG_PROTON_PID $READY_PID 2>/dev/null || true\n"
+        )
+        # 130 = SIGINT, 143 = SIGTERM — normal when AMP Stop interrupts the wrapper.
+        handle.write(
+            'if [ "${CLEANUP_STARTED:-0}" = "1" ] || [ "$EC" -eq 130 ] || [ "$EC" -eq 143 ]; then\n'
+        )
+        handle.write(
+            '  amplog "Launch Info" "Info" "Server stopped cleanly by AMP"\n'
+        )
+        handle.write("  exit 0\n")
+        handle.write("fi\n")
         handle.write('amplog "Launch Info" "Info" "Server exited with code: $EC"\n')
         handle.write("exit $EC\n")
     try:
@@ -747,8 +902,14 @@ def main():
         json.dump(launch, handle, indent=2)
         handle.write("\n")
 
+    proton_log = as_bool(settings.get("enable_proton_logging"), True)
     write_linux_wrapper(
-        server_dir, launch["serverconfig"], launch["seasondefinition"], tcp_port, http_port
+        server_dir,
+        launch["serverconfig"],
+        launch["seasondefinition"],
+        tcp_port,
+        http_port,
+        proton_log=proton_log,
     )
     write_windows_wrapper(
         server_dir, launch["serverconfig"], launch["seasondefinition"], tcp_port, http_port
