@@ -55,22 +55,253 @@ def load_json(path, default=None):
     return default if default is not None else {}
 
 
-def first_practice_event(server_dir):
-    events_path = os.path.join(server_dir, "events_practice.json")
-    if not os.path.isfile(events_path):
+def event_catalog(server_dir):
+    """Load practice (+ race weekend) events for track/layout validation."""
+    events = []
+    for name in ("events_practice.json", "events_race_weekend.json"):
+        path = os.path.join(server_dir, name)
+        if not os.path.isfile(path):
+            continue
+        try:
+            events.extend(load_json(path, {}).get("events", []) or [])
+        except (TypeError, ValueError):
+            continue
+    return events
+
+
+def normalize_catalog_event(raw):
+    if not isinstance(raw, dict):
         return None
+    track = clean_str(raw.get("track", ""))
+    layout = clean_str(raw.get("layout", ""))
+    if not track:
+        return None
+    name = clean_str(raw.get("name") or raw.get("event_name") or "")
+    length = raw.get("track_length", raw.get("length", 0))
     try:
-        events = load_json(events_path, {}).get("events", [])
-        if not events:
-            return None
-        event = events[0]
-        track = event.get("track", "")
-        layout = event.get("layout", "")
-        name = event.get("name", event.get("event_name", ""))
-        length = event.get("track_length", event.get("length", 0))
-        return {"track": track, "layout": layout, "event_name": name, "track_length": int(length)}
-    except (json.JSONDecodeError, TypeError, ValueError):
+        length = int(length or 0)
+    except (TypeError, ValueError):
+        length = 0
+    return {
+        "track": track,
+        "layout": layout,
+        "event_name": name,
+        "track_length": length,
+    }
+
+
+def first_practice_event(server_dir):
+    for raw in event_catalog(server_dir):
+        normalized = normalize_catalog_event(raw)
+        if normalized:
+            return normalized
+    return None
+
+
+def split_combined_layout(value):
+    """Parse mistaken UI values like 'Nurburgring - Touristenfahrten'."""
+    text = clean_str(value)
+    if " - " not in text:
+        return None, None
+    left, right = text.split(" - ", 1)
+    left, right = clean_str(left), clean_str(right)
+    if left and right:
+        return left, right
+    return None, None
+
+
+def find_catalog_event(catalog, track="", layout="", event_name=""):
+    track = clean_str(track)
+    layout = clean_str(layout)
+    event_name = clean_str(event_name)
+    normalized = [e for e in (normalize_catalog_event(raw) for raw in catalog) if e]
+    if not normalized:
         return None
+
+    def match(pred):
+        for item in normalized:
+            if pred(item):
+                return item
+        return None
+
+    if track and layout and event_name:
+        hit = match(
+            lambda e: e["track"] == track
+            and e["layout"] == layout
+            and e["event_name"] == event_name
+        )
+        if hit:
+            return hit
+    if track and layout:
+        hit = match(lambda e: e["track"] == track and e["layout"] == layout)
+        if hit:
+            return hit
+    if track and event_name:
+        hit = match(lambda e: e["track"] == track and e["event_name"] == event_name)
+        if hit:
+            return hit
+    if track and not layout:
+        hit = match(lambda e: e["track"] == track)
+        if hit:
+            return hit
+    if layout and not track:
+        layout_hits = [e for e in normalized if e["layout"] == layout]
+        if len(layout_hits) == 1:
+            return layout_hits[0]
+    return None
+
+
+def resolve_season_event(server_dir, event):
+    """
+    Resolve AMP season event fields to a catalog entry.
+    Rejects empty-track custom layouts that previously fell through to Brands Hatch.
+    """
+    event = dict(event or {})
+    track = clean_str(event.get("track", ""))
+    layout = clean_str(event.get("layout", ""))
+    event_name = clean_str(event.get("event_name", ""))
+    try:
+        track_length = int(event.get("track_length") or 0)
+    except (TypeError, ValueError):
+        track_length = 0
+
+    # Fix combined strings pasted into Layout (or Track).
+    if not track and layout:
+        maybe_track, maybe_layout = split_combined_layout(layout)
+        if maybe_track:
+            amplog(
+                "Track Fix",
+                "Warning",
+                f"Layout '{layout}' looks combined; treating as track='{maybe_track}' layout='{maybe_layout}'",
+            )
+            track, layout = maybe_track, maybe_layout
+    if track and " - " in track and not layout:
+        maybe_track, maybe_layout = split_combined_layout(track)
+        if maybe_track:
+            track, layout = maybe_track, maybe_layout
+
+    catalog = event_catalog(server_dir)
+    wants_custom = bool(track or layout or event_name or track_length)
+
+    if not wants_custom:
+        discovered = first_practice_event(server_dir)
+        if discovered:
+            amplog(
+                "Track Info",
+                "Info",
+                f"No track configured; using first catalog event "
+                f"{discovered['track']} / {discovered['layout']}",
+            )
+            return discovered
+        return None
+
+    hit = find_catalog_event(catalog, track=track, layout=layout, event_name=event_name)
+    if hit:
+        # Prefer catalog length/name when AMP left them empty/zero.
+        if not event_name:
+            event_name = hit["event_name"]
+        if track_length <= 0:
+            track_length = hit["track_length"]
+        if not track:
+            track = hit["track"]
+        if not layout:
+            layout = hit["layout"]
+        # If user supplied a name/length that differs, keep catalog match identity
+        # but allow explicit non-empty overrides for name/length when provided.
+        resolved = {
+            "track": hit["track"],
+            "layout": hit["layout"],
+            "event_name": event_name or hit["event_name"],
+            "track_length": track_length if track_length > 0 else hit["track_length"],
+        }
+        amplog(
+            "Track Info",
+            "Info",
+            f"Using {resolved['track']} / {resolved['layout']} "
+            f"({resolved['event_name']}, {resolved['track_length']}m)",
+        )
+        return resolved
+
+    # Unknown custom values: fail clearly instead of silently using Brands Hatch.
+    samples = []
+    for raw in catalog[:8]:
+        item = normalize_catalog_event(raw)
+        if item:
+            samples.append(f"{item['track']} / {item['layout']}")
+    sample_txt = "; ".join(samples) if samples else "(no events_*.json found)"
+    print(
+        "ERROR: Track/layout not found in server catalog.\n"
+        f"  Got track={track!r} layout={layout!r} event_name={event_name!r}\n"
+        "  Use exact ids from events_practice.json, for example:\n"
+        "    Track ID: Nurburgring\n"
+        "    Layout: Touristenfahrten\n"
+        "    Event Name: Touristenfahrten Time Attack\n"
+        f"  Examples: {sample_txt}",
+        file=sys.stderr,
+    )
+    return None
+
+
+def save_json(path, data):
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(data, handle, indent=2)
+        handle.write("\n")
+
+
+def resolve_http_port(settings, settings_path):
+    """
+    Apply Enable HTTP/API + port. When disabled, force port 0 into server.json so
+    AMP $HTTPPort / firewall reservation stays aligned after the next settings sync.
+    """
+    http_enabled = as_bool(settings.get("enable_http_api"), True)
+    try:
+        http_port = int(settings.get("server_http_port", 8081))
+    except (TypeError, ValueError):
+        http_port = 8081
+
+    preferred = settings.get("server_http_port_preferred")
+    try:
+        preferred = int(preferred) if preferred not in (None, "") else None
+    except (TypeError, ValueError):
+        preferred = None
+
+    if not http_enabled:
+        if http_port > 0:
+            settings["server_http_port_preferred"] = http_port
+        elif preferred and preferred > 0:
+            settings["server_http_port_preferred"] = preferred
+        http_port = 0
+        amplog(
+            "Port Info",
+            "Info",
+            "HTTP/API disabled (port 0). AMP firewall for HTTP closes when HTTP/API Port is 0. "
+            "Save in Configuration if the Ports UI still shows the old value.",
+        )
+    else:
+        if http_port <= 0:
+            http_port = preferred if preferred and preferred > 0 else 8081
+            amplog(
+                "Port Info",
+                "Info",
+                f"HTTP/API enabled; restored port {http_port} (was 0).",
+            )
+        if http_port > 65535:
+            print(
+                f"ERROR: Invalid HTTP port {http_port}. Set HTTP/API Port in AMP (0-65535).",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        settings["server_http_port_preferred"] = http_port
+
+    settings["enable_http_api"] = http_enabled
+    settings["server_http_port"] = http_port
+    try:
+        save_json(settings_path, settings)
+    except OSError as exc:
+        amplog("Port Warning", "Warning", f"Could not write {settings_path}: {exc}")
+
+    return http_enabled, http_port
 
 
 def build_allowed_cars(server_dir):
@@ -266,23 +497,27 @@ def main():
         )
         sys.exit(1)
 
-    settings = load_json(os.path.join(cfg_dir, "server.json"), {})
-    season = load_json(os.path.join(cfg_dir, "season.json"), {})
+    settings_path = os.path.join(cfg_dir, "server.json")
+    season_path = os.path.join(cfg_dir, "season.json")
+    settings = load_json(settings_path, {})
+    season = load_json(season_path, {})
 
-    event = season.get("event", {})
-    if not event.get("track"):
-        discovered = first_practice_event(server_dir)
-        if discovered:
-            event = discovered
-            season["event"] = event
-
-    if not event.get("track"):
+    event = resolve_season_event(server_dir, season.get("event", {}))
+    if not event or not event.get("track"):
         print(
-            "ERROR: No track configured in cfg/season.json and events_practice.json could not be read. "
-            "Set Track ID / Layout / Event Name in Configuration, or ensure the server installed correctly.",
+            "ERROR: No valid track configured in cfg/season.json and events catalog could not resolve one. "
+            "Set Track ID / Layout / Event Name in Configuration to exact catalog values, "
+            "or ensure the server installed correctly.",
             file=sys.stderr,
         )
         sys.exit(1)
+
+    season["event"] = {
+        "track": event["track"],
+        "layout": event["layout"],
+        "event_name": event["event_name"],
+        "track_length": int(event["track_length"]),
+    }
 
     season.setdefault("export_json", False)
     game_type = season.setdefault("game_type", "GameModeType_PRACTICE")
@@ -290,15 +525,22 @@ def main():
     season.setdefault("weather_behaviour", "GameModeSelectionWeatherBehaviour_STATIC")
     season.setdefault("initial_grip", "InitialGrip_GREEN")
 
-    if event.get("track_length") is not None:
-        event["track_length"] = str(event["track_length"])
-
     game_config = season.get("game_config") or {}
     game_config.setdefault("practice_duration", 1200)
     game_config.setdefault("practice_overtime_waiting_next_session", 10)
     game_config.setdefault("practice_max_wait_to_box", 10)
     apply_practice_time(game_config)
     season["game_config"] = game_config
+
+    try:
+        # Persist resolved track so AMP UI / next start do not keep bad combined layouts.
+        save_json(season_path, season)
+    except OSError as exc:
+        amplog("Track Warning", "Warning", f"Could not write {season_path}: {exc}")
+
+    # ACE payload historically stringifies track_length (keep season.json numeric for AMP).
+    payload_season = json.loads(json.dumps(season))
+    payload_season["event"]["track_length"] = str(payload_season["event"]["track_length"])
 
     # AC EVO expects TCP and UDP on the same port (AMP GamePort / Protocol Both).
     game_port = int(
@@ -313,17 +555,7 @@ def main():
     tcp_port = game_port
     udp_port = game_port
 
-    http_enabled = as_bool(settings.get("enable_http_api"), True)
-    try:
-        http_port = int(settings.get("server_http_port", 8081))
-    except (TypeError, ValueError):
-        http_port = 8081
-    if not http_enabled or http_port <= 0:
-        http_port = 0
-        http_enabled = False
-    elif http_port > 65535:
-        print(f"ERROR: Invalid HTTP port {http_port}. Set HTTP/API Port in AMP (0-65535).", file=sys.stderr)
-        sys.exit(1)
+    http_enabled, http_port = resolve_http_port(settings, settings_path)
 
     amplog("Prepare Info", "Info", f"Python {sys.version.split()[0]} | PID {os.getpid()} | UID {process_uid()}")
     amplog(
@@ -376,7 +608,7 @@ def main():
 
     launch = {
         "serverconfig": encode_payload(config),
-        "seasondefinition": encode_payload(season),
+        "seasondefinition": encode_payload(payload_season),
     }
 
     with open(os.path.join(cfg_dir, "launch.json"), "w", encoding="utf-8") as handle:
