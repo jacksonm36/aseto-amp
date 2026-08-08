@@ -241,7 +241,7 @@
         "DisplayName": "Track ID",
         "Category": "Assetto Corsa EVO:stadia_controller",
         "Subcategory": "Gameplay:joystick:2",
-        "Description": "Exact track id from the server install (e.g. Nurburgring). Leave empty only to auto-pick the first practice event. Must match events_practice.json — not a display label",
+        "Description": "ACE track id from events_practice.json (e.g. Nurburgring). Legacy AC1 ids like ks_nordschleife are auto-aliased. Leave empty to auto-pick the first practice event",
         "Keywords": "track",
         "FieldName": "track",
         "InputType": "text",
@@ -256,7 +256,7 @@
         "DisplayName": "Track Layout",
         "Category": "Assetto Corsa EVO:stadia_controller",
         "Subcategory": "Gameplay:joystick:2",
-        "Description": "Exact layout id for that track (e.g. Touristenfahrten or GP). Not 'Track - Layout' combined strings",
+        "Description": "ACE layout id (e.g. Nordschleife, Touristenfahrten, GP). Not combined 'Track - Layout' strings",
         "Keywords": "layout",
         "FieldName": "layout",
         "InputType": "text",
@@ -264,7 +264,7 @@
         "ParamFieldName": "event.layout",
         "IncludeInCommandLine": false,
         "DefaultValue": "",
-        "Placeholder": "Touristenfahrten",
+        "Placeholder": "Nordschleife",
         "EnumValues": {}
     },
     {

@@ -17,6 +17,33 @@ LAUNCH_PATHS = {
 }
 VALID_TUNING_TYPES = {"TuningAllowed", "TuningDenied"}
 
+# Common AC1 / community ids -> ACE events_practice.json track + optional layout.
+TRACK_ALIASES = {
+    "ks_nordschleife": ("Nurburgring", "Nordschleife"),
+    "nordschleife": ("Nurburgring", "Nordschleife"),
+    "ks_nurburgring": ("Nurburgring", None),
+    "nürburgring": ("Nurburgring", None),
+    "nurburgring_24h": ("Nurburgring", "24h"),
+    "ks_brands_hatch": ("Brands Hatch", None),
+    "ks_monza": ("Monza", None),
+    "ks_spa": ("Circuit de Spa Francorchamps", None),
+    "ks_silverstone": ("Silverstone", None),  # may not exist; alias only if catalog has it
+    "ks_imola": ("Imola", None),
+    "ks_laguna_seca": ("Laguna Seca", None),
+    "ks_red_bull_ring": ("Red Bull Ring", None),
+    "ks_suzuka": ("Suzuka", None),
+    "ks_kyalami": ("Kyalami", None),
+    "ks_mount_panorama": ("Mount Panorama", None),
+    "ks_oulton_park": ("Oulton Park", None),
+    "ks_donington": ("Donington Park", None),
+    "ks_paul_ricard": ("Paul Ricard", None),
+    "ks_watkins_glen": ("Watkins Glen International", None),
+    "ks_sebring": ("Sebring International Raceway", None),
+    "ks_road_atlanta": ("Road Atlanta", None),
+    "ks_cota": ("Circuit Of The Americas", None),
+    "ks_fuji": ("Fuji Speedway", None),
+}
+
 
 def amplog(component, level, message):
     ts = datetime.now().strftime("%H:%M:%S")
@@ -151,6 +178,21 @@ def find_catalog_event(catalog, track="", layout="", event_name=""):
     return None
 
 
+def apply_track_alias(track, layout):
+    """Map legacy AC1 folder ids (e.g. ks_nordschleife) to ACE catalog names."""
+    key = clean_str(track).lower().replace(" ", "_")
+    alias = TRACK_ALIASES.get(key) or TRACK_ALIASES.get(clean_str(track).lower())
+    if not alias:
+        return track, layout, False
+    new_track, alias_layout = alias
+    new_layout = layout
+    if alias_layout and (not layout or layout.lower() in (key, clean_str(track).lower(), alias_layout.lower())):
+        new_layout = alias_layout
+    elif not layout and alias_layout:
+        new_layout = alias_layout
+    return new_track, new_layout, True
+
+
 def resolve_season_event(server_dir, event):
     """
     Resolve AMP season event fields to a catalog entry.
@@ -179,6 +221,15 @@ def resolve_season_event(server_dir, event):
         maybe_track, maybe_layout = split_combined_layout(track)
         if maybe_track:
             track, layout = maybe_track, maybe_layout
+
+    aliased_track, aliased_layout, was_aliased = apply_track_alias(track, layout)
+    if was_aliased:
+        amplog(
+            "Track Fix",
+            "Warning",
+            f"Aliased '{track}'/{layout or '-'} -> '{aliased_track}'/{aliased_layout or '-'}",
+        )
+        track, layout = aliased_track, aliased_layout
 
     catalog = event_catalog(server_dir)
     wants_custom = bool(track or layout or event_name or track_length)
