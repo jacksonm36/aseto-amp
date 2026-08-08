@@ -389,20 +389,24 @@ def write_linux_wrapper(server_dir, serverconfig, seasondefinition, tcp_port, ht
     wrapper = os.path.join(server_dir, "launch_server.sh")
     with open(wrapper, "w", encoding="utf-8", newline="\n") as handle:
         handle.write("#!/bin/bash\n")
+        # Own process group so AMP OS_CLOSE / TERM can tear down Proton+Wine children.
+        handle.write("set -m\n")
         handle.write('amplog() { echo "[$(date +%H:%M:%S)] [$1/$2]  : $3"; }\n')
         handle.write('amplog "Launch Info" "Info" "Starting AssettoCorsaEVOServer.exe via Proton"\n')
         http_label = "disabled" if not http_port else str(http_port)
         handle.write(f'amplog "Launch Info" "Info" "Ports TCP/UDP {tcp_port}, HTTP {http_label}"\n')
+        handle.write('ROOT="$(cd "${0%/*}/.." && pwd)"\n')
+        handle.write('SERVER_DIR="${0%/*}"\n')
         handle.write(
-            f'"${{0%/*}}/../.proton/proton" runinprefix '
-            f'"${{0%/*}}/AssettoCorsaEVOServer.exe" '
+            '"$ROOT/.proton/proton" runinprefix '
+            '"$SERVER_DIR/AssettoCorsaEVOServer.exe" '
             f'-serverconfig {serverconfig} '
             f'-seasondefinition {seasondefinition} 2>&1 &\n'
         )
         handle.write("SERVER_PID=$!\n")
         # ACE writes its game log under the Wine prefix; mirror it into AMP's console.
         handle.write(
-            'ACELOG="${STEAM_COMPAT_DATA_PATH:-${0%/*}/../.proton/compatdata}'
+            'ACELOG="${STEAM_COMPAT_DATA_PATH:-$ROOT/.proton/compatdata}'
             '/pfx/drive_c/users/steamuser/Saved Games/ACE-Server/'
             'Assetto Corsa EVO Server.txt"\n'
         )
@@ -412,11 +416,30 @@ def write_linux_wrapper(server_dir, serverconfig, seasondefinition, tcp_port, ht
             'tail -n 0 -F "$ACELOG" 2>/dev/null ) &\n'
         )
         handle.write("LOG_PID=$!\n")
+        handle.write("cleanup() {\n")
+        handle.write('  amplog "Launch Info" "Info" "Stopping server (full Proton/Wine tree)"\n')
+        handle.write("  trap - INT TERM EXIT\n")
+        handle.write("  kill $LOG_PID 2>/dev/null || true\n")
+        handle.write("  # Kill process group first (Proton python + children).\n")
+        handle.write("  kill -TERM -$SERVER_PID $SERVER_PID 2>/dev/null || true\n")
+        handle.write("  sleep 1\n")
+        handle.write("  # Wine often reparents AssettoCorsaEVOServer/wineserver; sweep by path.\n")
         handle.write(
-            'cleanup() { amplog "Launch Info" "Info" "Stopping server"; '
-            "kill $SERVER_PID $LOG_PID 2>/dev/null; "
-            "wait $SERVER_PID 2>/dev/null; exit; }\n"
+            '  pkill -TERM -f "$SERVER_DIR/AssettoCorsaEVOServer.exe" 2>/dev/null || true\n'
         )
+        handle.write(
+            '  pkill -TERM -f "$ROOT/.proton/files/.*/wineserver" 2>/dev/null || true\n'
+        )
+        handle.write(
+            '  pkill -TERM -f "$ROOT/.proton/compatdata" 2>/dev/null || true\n'
+        )
+        handle.write("  sleep 1\n")
+        handle.write(
+            '  pkill -KILL -f "$SERVER_DIR/AssettoCorsaEVOServer.exe" 2>/dev/null || true\n'
+        )
+        handle.write("  kill -KILL -$SERVER_PID $SERVER_PID 2>/dev/null || true\n")
+        handle.write("  wait $SERVER_PID 2>/dev/null || true\n")
+        handle.write("}\n")
         handle.write("trap cleanup INT TERM\n")
         handle.write(f"GP={tcp_port}\n")
         handle.write(f"HP={http_port}\n")
