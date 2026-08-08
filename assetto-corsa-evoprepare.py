@@ -416,33 +416,88 @@ def write_linux_wrapper(server_dir, serverconfig, seasondefinition, tcp_port, ht
             'tail -n 0 -F "$ACELOG" 2>/dev/null ) &\n'
         )
         handle.write("LOG_PID=$!\n")
+        handle.write(f"GP={tcp_port}\n")
+        handle.write(f"HP={http_port}\n")
         handle.write("cleanup() {\n")
-        handle.write('  amplog "Launch Info" "Info" "Stopping server (full Proton/Wine tree)"\n')
-        handle.write("  trap - INT TERM EXIT\n")
+        handle.write("  # Re-entrancy guard; stream every step to AMP console (stdout).\n")
+        handle.write('  [ "${CLEANUP_STARTED:-0}" = "1" ] && return 0\n')
+        handle.write("  CLEANUP_STARTED=1\n")
+        handle.write("  trap - INT TERM\n")
+        handle.write("  echo\n")
+        handle.write(
+            '  amplog "Shutdown Info" "Info" "========== SHUTDOWN START =========="\n'
+        )
+        handle.write(
+            '  amplog "Shutdown Info" "Info" "Signal received - stopping ACE / Proton / Wine"\n'
+        )
+        handle.write(
+            '  amplog "Shutdown Info" "Info" "SERVER_PID=${SERVER_PID:-?} LOG_PID=${LOG_PID:-?} GP=$GP HP=$HP"\n'
+        )
+        handle.write("  sync 2>/dev/null || true\n")
+        handle.write(
+            '  amplog "Shutdown Info" "Info" "Stopping ACE log tail (LOG_PID=$LOG_PID)"\n'
+        )
         handle.write("  kill $LOG_PID 2>/dev/null || true\n")
-        handle.write("  # Kill process group first (Proton python + children).\n")
+        handle.write(
+            '  amplog "Shutdown Info" "Info" "Sending TERM to Proton process group (-$SERVER_PID)"\n'
+        )
         handle.write("  kill -TERM -$SERVER_PID $SERVER_PID 2>/dev/null || true\n")
         handle.write("  sleep 1\n")
-        handle.write("  # Wine often reparents AssettoCorsaEVOServer/wineserver; sweep by path.\n")
+        handle.write(
+            '  amplog "Shutdown Info" "Info" "Sweeping AssettoCorsaEVOServer.exe (TERM)"\n'
+        )
         handle.write(
             '  pkill -TERM -f "$SERVER_DIR/AssettoCorsaEVOServer.exe" 2>/dev/null || true\n'
         )
         handle.write(
-            '  pkill -TERM -f "$ROOT/.proton/files/.*/wineserver" 2>/dev/null || true\n'
+            '  amplog "Shutdown Info" "Info" "Sweeping wineserver under .proton (TERM)"\n'
+        )
+        handle.write(
+            '  pkill -TERM -f "$ROOT/.proton/.*/wineserver" 2>/dev/null || true\n'
+        )
+        handle.write(
+            '  amplog "Shutdown Info" "Info" "Sweeping leftover Proton compatdata procs (TERM)"\n'
         )
         handle.write(
             '  pkill -TERM -f "$ROOT/.proton/compatdata" 2>/dev/null || true\n'
         )
         handle.write("  sleep 1\n")
         handle.write(
-            '  pkill -KILL -f "$SERVER_DIR/AssettoCorsaEVOServer.exe" 2>/dev/null || true\n'
+            '  STILL=$(pgrep -af AssettoCorsaEVOServer.exe 2>/dev/null | grep -F "$SERVER_DIR" | head -5 || true)\n'
         )
-        handle.write("  kill -KILL -$SERVER_PID $SERVER_PID 2>/dev/null || true\n")
+        handle.write('  if [ -n "$STILL" ]; then\n')
+        handle.write(
+            '    amplog "Shutdown Warning" "Warning" "Processes still alive - escalating to KILL"\n'
+        )
+        handle.write('    echo "$STILL"\n')
+        handle.write(
+            '    pkill -KILL -f "$SERVER_DIR/AssettoCorsaEVOServer.exe" 2>/dev/null || true\n'
+        )
+        handle.write("    kill -KILL -$SERVER_PID $SERVER_PID 2>/dev/null || true\n")
+        handle.write(
+            '    pkill -KILL -f "$ROOT/.proton/.*/wineserver" 2>/dev/null || true\n'
+        )
+        handle.write("  else\n")
+        handle.write(
+            '    amplog "Shutdown Info" "Info" "No leftover ACE/Proton processes detected"\n'
+        )
+        handle.write("  fi\n")
         handle.write("  wait $SERVER_PID 2>/dev/null || true\n")
+        handle.write(
+            '  amplog "Shutdown Info" "Info" "Ports check after stop (expect empty)"\n'
+        )
+        handle.write(
+            '  ss -tulnp 2>/dev/null | grep -E ":${GP} |:${HP} " || '
+            'amplog "Shutdown Info" "Info" "Game/HTTP ports are closed"\n'
+        )
+        handle.write(
+            '  amplog "Shutdown Info" "Info" "========== SHUTDOWN COMPLETE =========="\n'
+        )
+        handle.write("  sync 2>/dev/null || true\n")
+        # Brief pause so AMP console can flush the last lines before process exit.
+        handle.write("  sleep 1\n")
         handle.write("}\n")
         handle.write("trap cleanup INT TERM\n")
-        handle.write(f"GP={tcp_port}\n")
-        handle.write(f"HP={http_port}\n")
         handle.write("check_ports() {\n")
         handle.write("  local LABEL=$1\n")
         handle.write("  if ! kill -0 $SERVER_PID 2>/dev/null; then\n")
