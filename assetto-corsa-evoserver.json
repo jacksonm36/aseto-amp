@@ -3,6 +3,7 @@
   "server_tcp_listener_port": 9700,
   "server_udp_listener_port": 9700,
   "server_http_port": 8081,
+  "enable_http_api": true,
   "max_players": 16,
   "cycle": true,
   "tuning_type": "TuningAllowed",

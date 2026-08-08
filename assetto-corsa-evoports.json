@@ -1,23 +1,16 @@
 [
     {
-        "Protocol": "UDP",
+        "Protocol": "Both",
         "Port": 9700,
-        "Ref": "UDPPort",
-        "Name": "Game UDP Port",
-        "Description": "Port for game traffic"
-    },
-    {
-        "Protocol": "TCP",
-        "Port": 9700,
-        "Ref": "TCPPort",
-        "Name": "Game TCP Port",
-        "Description": "Port for game traffic (must match UDP)"
+        "Ref": "GamePort",
+        "Name": "Game Port",
+        "Description": "TCP and UDP game traffic (ACE requires the same port for both)"
     },
     {
         "Protocol": "TCP",
         "Port": 8081,
         "Ref": "HTTPPort",
-        "Name": "HTTP Port",
-        "Description": "Port for HTTP/API traffic"
+        "Name": "HTTP/API Port",
+        "Description": "Optional HTTP listing/results API. Set to 0 or turn off Enable HTTP/API to disable"
     }
 ]

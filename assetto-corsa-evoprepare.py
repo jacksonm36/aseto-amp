@@ -160,7 +160,8 @@ def write_linux_wrapper(server_dir, serverconfig, seasondefinition, tcp_port, ht
         handle.write("#!/bin/bash\n")
         handle.write('amplog() { echo "[$(date +%H:%M:%S)] [$1/$2]  : $3"; }\n')
         handle.write('amplog "Launch Info" "Info" "Starting AssettoCorsaEVOServer.exe via Proton"\n')
-        handle.write(f'amplog "Launch Info" "Info" "Ports TCP/UDP {tcp_port}, HTTP {http_port}"\n')
+        http_label = "disabled" if not http_port else str(http_port)
+        handle.write(f'amplog "Launch Info" "Info" "Ports TCP/UDP {tcp_port}, HTTP {http_label}"\n')
         handle.write(
             f'"${{0%/*}}/../.proton/proton" runinprefix '
             f'"${{0%/*}}/AssettoCorsaEVOServer.exe" '
@@ -241,7 +242,8 @@ def write_windows_wrapper(server_dir, serverconfig, seasondefinition, tcp_port, 
     with open(wrapper, "w", encoding="utf-8", newline="\r\n") as handle:
         handle.write("@echo off\r\n")
         handle.write("setlocal\r\n")
-        handle.write(f"echo [Launch Info] Ports TCP/UDP {tcp_port}, HTTP {http_port}\r\n")
+        http_label = "disabled" if not http_port else str(http_port)
+        handle.write(f"echo [Launch Info] Ports TCP/UDP {tcp_port}, HTTP {http_label}\r\n")
         handle.write(
             f'AssettoCorsaEVOServer.exe -serverconfig {serverconfig} '
             f"-seasondefinition {seasondefinition}\r\n"
@@ -298,19 +300,43 @@ def main():
     apply_practice_time(game_config)
     season["game_config"] = game_config
 
-    # AC EVO expects TCP and UDP on the same port.
-    udp_port = int(settings.get("server_udp_listener_port", settings.get("server_tcp_listener_port", 9700)))
-    tcp_port = udp_port
-    http_port = int(settings.get("server_http_port", 8081))
+    # AC EVO expects TCP and UDP on the same port (AMP GamePort / Protocol Both).
+    game_port = int(
+        settings.get(
+            "server_udp_listener_port",
+            settings.get("server_tcp_listener_port", 9700),
+        )
+    )
+    if game_port <= 0 or game_port > 65535:
+        print(f"ERROR: Invalid game port {game_port}. Set Game Port in AMP (1-65535).", file=sys.stderr)
+        sys.exit(1)
+    tcp_port = game_port
+    udp_port = game_port
+
+    http_enabled = as_bool(settings.get("enable_http_api"), True)
+    try:
+        http_port = int(settings.get("server_http_port", 8081))
+    except (TypeError, ValueError):
+        http_port = 8081
+    if not http_enabled or http_port <= 0:
+        http_port = 0
+        http_enabled = False
+    elif http_port > 65535:
+        print(f"ERROR: Invalid HTTP port {http_port}. Set HTTP/API Port in AMP (0-65535).", file=sys.stderr)
+        sys.exit(1)
 
     amplog("Prepare Info", "Info", f"Python {sys.version.split()[0]} | PID {os.getpid()} | UID {process_uid()}")
-    amplog("Prepare Info", "Info", f"Ports TCP/UDP={tcp_port} HTTP={http_port}")
+    amplog(
+        "Prepare Info",
+        "Info",
+        f"Ports TCP/UDP={tcp_port} HTTP={'off' if not http_enabled else http_port}",
+    )
 
-    if tcp_in_use(http_port):
+    if http_enabled and tcp_in_use(http_port):
         amplog(
             "Port Check",
             "Warning",
-            f"HTTP port {http_port} appears in use. Change HTTP Port in AMP instead of auto-bumping "
+            f"HTTP port {http_port} appears in use. Change HTTP/API Port in AMP instead of auto-bumping "
             "(auto-bump would desync AMP firewall rules).",
         )
     if tcp_in_use(tcp_port):
