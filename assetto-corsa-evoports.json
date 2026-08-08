@@ -11,11 +11,11 @@
         "Port": 9700,
         "Ref": "TCPPort",
         "Name": "Game TCP Port",
-        "Description": "Port for game traffic"
+        "Description": "Port for game traffic (must match UDP)"
     },
     {
         "Protocol": "TCP",
-        "Port": 8090,
+        "Port": 8081,
         "Ref": "HTTPPort",
         "Name": "HTTP Port",
         "Description": "Port for HTTP/API traffic"

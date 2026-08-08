@@ -168,10 +168,24 @@ def write_linux_wrapper(server_dir, serverconfig, seasondefinition, tcp_port, ht
             f'-seasondefinition {seasondefinition} 2>&1 &\n'
         )
         handle.write("SERVER_PID=$!\n")
+        # ACE writes its game log under the Wine prefix; mirror it into AMP's console.
         handle.write(
-            'trap \'amplog "Launch Info" "Info" "Stopping server"; '
-            "kill $SERVER_PID 2>/dev/null; wait $SERVER_PID 2>/dev/null; exit\' INT TERM\n"
+            'ACELOG="${STEAM_COMPAT_DATA_PATH:-${0%/*}/../.proton/compatdata}'
+            '/pfx/drive_c/users/steamuser/Saved Games/ACE-Server/'
+            'Assetto Corsa EVO Server.txt"\n'
         )
+        handle.write("LOG_PID=\"\"\n")
+        handle.write(
+            '( for _ in $(seq 1 60); do [ -f "$ACELOG" ] && break; sleep 1; done; '
+            'tail -n 0 -F "$ACELOG" 2>/dev/null ) &\n'
+        )
+        handle.write("LOG_PID=$!\n")
+        handle.write(
+            'cleanup() { amplog "Launch Info" "Info" "Stopping server"; '
+            "kill $SERVER_PID $LOG_PID 2>/dev/null; "
+            "wait $SERVER_PID 2>/dev/null; exit; }\n"
+        )
+        handle.write("trap cleanup INT TERM\n")
         handle.write(f"GP={tcp_port}\n")
         handle.write(f"HP={http_port}\n")
         handle.write("check_ports() {\n")
@@ -184,7 +198,6 @@ def write_linux_wrapper(server_dir, serverconfig, seasondefinition, tcp_port, ht
         handle.write('  amplog "Monitor Info" "Info" "$LABEL"\n')
         handle.write('  TCP_L=$(ss -tlnp 2>/dev/null | grep -F ":${GP} " || true)\n')
         handle.write('  UDP_L=$(ss -ulnp 2>/dev/null | grep -F ":${GP} " || true)\n')
-        handle.write('  HTTP_L=$(ss -tlnp 2>/dev/null | grep -F ":${HP} " || true)\n')
         handle.write(
             '[ -n "$TCP_L" ] && amplog "Monitor Info" "Info" "TCP ${GP}: listening" '
             '|| amplog "Monitor Warning" "Warning" "TCP ${GP}: not listening"\n'
@@ -193,9 +206,19 @@ def write_linux_wrapper(server_dir, serverconfig, seasondefinition, tcp_port, ht
             '[ -n "$UDP_L" ] && amplog "Monitor Info" "Info" "UDP ${GP}: listening" '
             '|| amplog "Monitor Warning" "Warning" "UDP ${GP}: not listening"\n'
         )
+        handle.write("  if [ \"$HP\" -gt 0 ] 2>/dev/null; then\n")
+        handle.write('    HTTP_L=$(ss -tlnp 2>/dev/null | grep -F ":${HP} " || true)\n')
         handle.write(
-            '[ -n "$HTTP_L" ] && amplog "Monitor Info" "Info" "HTTP ${HP}: listening" '
+            '    [ -n "$HTTP_L" ] && amplog "Monitor Info" "Info" "HTTP ${HP}: listening" '
             '|| amplog "Monitor Warning" "Warning" "HTTP ${HP}: not listening"\n'
+        )
+        handle.write("  else\n")
+        handle.write('    amplog "Monitor Info" "Info" "HTTP: disabled"\n')
+        handle.write("  fi\n")
+        # AMP AppReadyRegex: emit a console line AMP can see (ACE logs often go to a Wine file).
+        handle.write(
+            'if [ -n "$TCP_L" ] && [ -n "$UDP_L" ]; then '
+            'echo "Listening to TCP ${GP} | UDP ${GP}"; fi\n'
         )
         handle.write("}\n")
         handle.write('sleep 5 && check_ports "5s post-launch" || true\n')
@@ -203,6 +226,7 @@ def write_linux_wrapper(server_dir, serverconfig, seasondefinition, tcp_port, ht
         handle.write('sleep 40 && check_ports "60s post-launch" || true\n')
         handle.write("wait $SERVER_PID 2>/dev/null\n")
         handle.write("EC=$?\n")
+        handle.write("kill $LOG_PID 2>/dev/null\n")
         handle.write('amplog "Launch Info" "Info" "Server exited with code: $EC"\n')
         handle.write("exit $EC\n")
     try:
@@ -277,7 +301,7 @@ def main():
     # AC EVO expects TCP and UDP on the same port.
     udp_port = int(settings.get("server_udp_listener_port", settings.get("server_tcp_listener_port", 9700)))
     tcp_port = udp_port
-    http_port = int(settings.get("server_http_port", 8090))
+    http_port = int(settings.get("server_http_port", 8081))
 
     amplog("Prepare Info", "Info", f"Python {sys.version.split()[0]} | PID {os.getpid()} | UID {process_uid()}")
     amplog("Prepare Info", "Info", f"Ports TCP/UDP={tcp_port} HTTP={http_port}")
