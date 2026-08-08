@@ -1,5 +1,13 @@
 [
     {
+        "UpdateStageName": "Restore SteamCMD Auth Cache",
+        "UpdateSourcePlatform": "Linux",
+        "UpdateSource": "Executable",
+        "UpdateSourceData": "/bin/bash",
+        "UpdateSourceArgs": "-c \"AUTH_BAK=\\\"{{$FullRootDir}}.steam-auth\\\"; DEST=\\\"$HOME/Steam/config\\\"; mkdir -p \\\"$DEST\\\" \\\"$AUTH_BAK\\\"; if [[ -f \\\"$AUTH_BAK/config.vdf\\\" ]] && ! grep -q ConnectCache \\\"$DEST/config.vdf\\\" 2>/dev/null; then cp -a \\\"$AUTH_BAK/config.vdf\\\" \\\"$DEST/config.vdf\\\" && echo \\\"Restored SteamCMD config.vdf from auth backup\\\"; fi; if compgen -G \\\"$AUTH_BAK/ssfn*\\\" >/dev/null 2>&1; then cp -a \\\"$AUTH_BAK\\\"/ssfn* \\\"$HOME/Steam/\\\" 2>/dev/null || true; fi; true\"",
+        "SkipOnFailure": true
+    },
+    {
         "UpdateStageName": "SteamCMD Server Download",
         "UpdateSourcePlatform": "Windows",
         "UpdateSource": "SteamCMD",
@@ -17,6 +25,14 @@
         "UpdateSourceTarget": "{{$FullBaseDir}}",
         "ForceDownloadPlatform": "Windows",
         "SkipOnFailure": false
+    },
+    {
+        "UpdateStageName": "Backup SteamCMD Auth Cache",
+        "UpdateSourcePlatform": "Linux",
+        "UpdateSource": "Executable",
+        "UpdateSourceData": "/bin/bash",
+        "UpdateSourceArgs": "-c \"AUTH_BAK=\\\"{{$FullRootDir}}.steam-auth\\\"; SRC=\\\"$HOME/Steam/config/config.vdf\\\"; mkdir -p \\\"$AUTH_BAK\\\"; if [[ -f \\\"$SRC\\\" ]] && grep -qE 'ConnectCache|RefreshToken|AccountName' \\\"$SRC\\\" 2>/dev/null; then cp -a \\\"$SRC\\\" \\\"$AUTH_BAK/config.vdf\\\" && echo \\\"Backed up SteamCMD auth to .steam-auth/\\\"; fi; if compgen -G \\\"$HOME/Steam/ssfn*\\\" >/dev/null 2>&1; then cp -a \\\"$HOME/Steam\\\"/ssfn* \\\"$AUTH_BAK/\\\" 2>/dev/null || true; fi; true\"",
+        "SkipOnFailure": true
     },
     {
         "UpdateStageName": "Configuration Directory Creation",
@@ -46,7 +62,7 @@
         "UpdateStageName": "Server Settings Download",
         "UpdateSourcePlatform": "All",
         "UpdateSource": "FetchURL",
-        "UpdateSourceData": "https://raw.githubusercontent.com/jacksonm36/aseto-amp/v1.11/assetto-corsa-evoserver.json",
+        "UpdateSourceData": "https://raw.githubusercontent.com/jacksonm36/aseto-amp/v1.12/assetto-corsa-evoserver.json",
         "UpdateSourceArgs": "server.json",
         "UpdateSourceTarget": "{{$FullBaseDir}}cfg",
         "OverwriteExistingFiles": false,
@@ -56,7 +72,7 @@
         "UpdateStageName": "Season Settings Download",
         "UpdateSourcePlatform": "All",
         "UpdateSource": "FetchURL",
-        "UpdateSourceData": "https://raw.githubusercontent.com/jacksonm36/aseto-amp/v1.11/assetto-corsa-evoseason.json",
+        "UpdateSourceData": "https://raw.githubusercontent.com/jacksonm36/aseto-amp/v1.12/assetto-corsa-evoseason.json",
         "UpdateSourceArgs": "season.json",
         "UpdateSourceTarget": "{{$FullBaseDir}}cfg",
         "OverwriteExistingFiles": false,
@@ -66,7 +82,7 @@
         "UpdateStageName": "Launch Prepare Script Download",
         "UpdateSourcePlatform": "All",
         "UpdateSource": "FetchURL",
-        "UpdateSourceData": "https://raw.githubusercontent.com/jacksonm36/aseto-amp/v1.11/assetto-corsa-evoprepare.py",
+        "UpdateSourceData": "https://raw.githubusercontent.com/jacksonm36/aseto-amp/v1.12/assetto-corsa-evoprepare.py",
         "UpdateSourceArgs": "prepare_launch.py",
         "UpdateSourceTarget": "{{$FullBaseDir}}",
         "OverwriteExistingFiles": true,
