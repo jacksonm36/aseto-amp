@@ -594,6 +594,51 @@ def write_linux_wrapper(
             "sleep 1; done ) &\n"
         )
         handle.write("READY_PID=$!\n")
+        # When ACE crashes, `kill $LOG_*` alone leaves nested `tail`/`bash` helpers
+        # reparented to PID 1 while still holding AMP's console pipes → Stop hangs.
+        handle.write("sweep_helpers() {\n")
+        handle.write(
+            "  kill $LOG_ACE_PID $LOG_RUN_PID $LOG_PROTON_PID $READY_PID 2>/dev/null || true\n"
+        )
+        handle.write("  # Direct children (port checkers, pipeline shells).\n")
+        handle.write("  pkill -TERM -P $$ 2>/dev/null || true\n")
+        handle.write(
+            '  pkill -TERM -f "tail -n 0 -F $PROTON_RUN_LOG" 2>/dev/null || true\n'
+        )
+        handle.write(
+            '  pkill -TERM -f "tail -n 0 -F $ACELOG" 2>/dev/null || true\n'
+        )
+        handle.write(
+            '  pkill -TERM -f "tail -n 0 -F $PROTON_LOG_DIR/" 2>/dev/null || true\n'
+        )
+        # Other copies of this wrapper script (not ourselves).
+        handle.write(
+            '  for p in $(pgrep -f "$SERVER_DIR/launch_server.sh" 2>/dev/null); do\n'
+        )
+        handle.write('    [ "$p" = "$$" ] && continue\n')
+        handle.write('    kill -TERM "$p" 2>/dev/null || true\n')
+        handle.write("  done\n")
+        handle.write("  sleep 1\n")
+        handle.write("  pkill -KILL -P $$ 2>/dev/null || true\n")
+        handle.write(
+            '  pkill -KILL -f "tail -n 0 -F $PROTON_RUN_LOG" 2>/dev/null || true\n'
+        )
+        handle.write(
+            '  pkill -KILL -f "tail -n 0 -F $ACELOG" 2>/dev/null || true\n'
+        )
+        handle.write(
+            '  pkill -KILL -f "tail -n 0 -F $PROTON_LOG_DIR/" 2>/dev/null || true\n'
+        )
+        handle.write(
+            '  for p in $(pgrep -f "$SERVER_DIR/launch_server.sh" 2>/dev/null); do\n'
+        )
+        handle.write('    [ "$p" = "$$" ] && continue\n')
+        handle.write('    kill -KILL "$p" 2>/dev/null || true\n')
+        handle.write("  done\n")
+        handle.write(
+            "  wait $LOG_ACE_PID $LOG_RUN_PID $LOG_PROTON_PID $READY_PID 2>/dev/null || true\n"
+        )
+        handle.write("}\n")
         handle.write("cleanup() {\n")
         handle.write("  # Re-entrancy guard; stream every step to AMP console (stdout).\n")
         handle.write('  [ "${CLEANUP_STARTED:-0}" = "1" ] && exit 0\n')
@@ -616,12 +661,7 @@ def write_linux_wrapper(
         handle.write(
             '  amplog "Shutdown Info" "Info" "Stopping log tails / ready watcher"\n'
         )
-        handle.write(
-            "  kill $LOG_ACE_PID $LOG_RUN_PID $LOG_PROTON_PID $READY_PID 2>/dev/null || true\n"
-        )
-        handle.write(
-            "  wait $LOG_ACE_PID $LOG_RUN_PID $LOG_PROTON_PID $READY_PID 2>/dev/null || true\n"
-        )
+        handle.write("  sweep_helpers\n")
         handle.write(
             '  amplog "Shutdown Info" "Info" "Sending TERM to Proton (pid $SERVER_PID)"\n'
         )
@@ -731,9 +771,8 @@ def write_linux_wrapper(
         handle.write('sleep 40 && check_ports "60s post-launch" || true\n')
         handle.write("wait $SERVER_PID 2>/dev/null\n")
         handle.write("EC=$?\n")
-        handle.write(
-            "kill $LOG_ACE_PID $LOG_RUN_PID $LOG_PROTON_PID $READY_PID 2>/dev/null || true\n"
-        )
+        # Always sweep helpers on ACE crash/exit so AMP console pipes close.
+        handle.write("sweep_helpers\n")
         # 130 = SIGINT, 143 = SIGTERM — normal when AMP Stop interrupts the wrapper.
         handle.write(
             'if [ "${CLEANUP_STARTED:-0}" = "1" ] || [ "$EC" -eq 130 ] || [ "$EC" -eq 143 ]; then\n'
