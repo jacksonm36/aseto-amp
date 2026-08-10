@@ -1,33 +1,27 @@
-# `cubecoders-compliant` branch
+# `cubecoders-compliant` branch notes
 
-Reshapes the ACE Generic template toward [CubeCoders/AMPTemplates](https://github.com/CubeCoders/AMPTemplates) rules: **no `.sh` / `.bat` app entrypoint**.
+See the main project docs in [`README.md`](README.md).
 
-## Why a Python trampoline?
+## Intent
 
-ACE needs fresh zlib+base64 `-serverconfig` / `-seasondefinition` on every Start. AMP does **not** reimport `cfg/launch.json` into `FormattedArgs` after PreStart, so pointing `App.Executable*` at Proton/EXE alone launches with **empty payloads**.
+Closer to [CubeCoders/AMPTemplates](https://github.com/CubeCoders/AMPTemplates) rules: **no `.sh` / `.bat` as `App.Executable*`**.
 
-This branch launches **`python3` / `python.exe`** (real executables, same class as `mono` hosts) with:
-
-```text
-prepare_launch.py "{{$FullBaseDir}}" --run
-```
-
-That builds payloads, then `exec`s Proton (`runinprefix AssettoCorsaEVOServer.exe …`) or the Windows EXE. AMP still monitors `AssettoCorsaEVOServer.exe` via `MonitorChildProcessName` + `DumpFullChildProcessTree`.
-
-## vs `main`
+## How it differs from `main`
 
 | | `main` | `cubecoders-compliant` |
 |--|--------|------------------------|
-| App entry | `launch_server.sh` / `.bat` | `python3` / `python.exe` `--run` |
-| Extra console | Proton mirror, IP via `ss` | Dropped |
-| Version | `1.30` | `2.0.1-compliant` |
+| App entry | `launch_server.sh` / `.bat` | `/usr/bin/python3` or `py.exe -3` + `prepare_launch.py --run` |
+| Console extras | ACE/Proton log mirror, ready poller, best-effort client IP | Dropped |
+| Config version | `1.30` | `2.0.2-compliant` |
 
-## Flags
+## Why Python instead of bare Proton?
 
-- `--run` — build + exec game
-- `--dry-run` — build only; print intent; no exec
-- `--allow-missing` — Update soft-skip if EXE not installed yet
+ACE needs fresh zlib+base64 `-serverconfig` / `-seasondefinition` every Start. AMP does not reimport `cfg/launch.json` into live CLI args after PreStart, so bare Proton/EXE would launch with empty payloads. The Python trampoline is a **real executable** (like `mono` hosts), builds payloads, then `exec`s Proton or the Windows EXE.
 
-## CubeCoders merge
+## ADS
 
-Their README still rejects AI-generated configs. This branch is for technical fit / ADS use (`jacksonm36/aseto-amp:cubecoders-compliant`), not a guaranteed official merge.
+```text
+jacksonm36/aseto-amp:cubecoders-compliant
+```
+
+CubeCoders may still reject a PR (AI policy / Steam ownership quirks). This branch is for technical fit and self-hosted ADS use.
